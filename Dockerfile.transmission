@@ -1,0 +1,19 @@
+FROM alpine:3.7
+MAINTAINER Nicolas Berard [berard.nicolas@gmail.com]
+VOLUME /data
+VOLUME /config
+
+RUN apk add --update \
+    bash \
+    transmission-daemon \
+    && rm -rf /var/cache/apk/*
+
+ARG username
+ARG password
+ARG uid
+RUN adduser -u $uid -D -h "/home/$username" $username
+RUN chown $username:$username /home/$username -R
+ENV username=$username
+ENV password=$password
+USER $username
+CMD /usr/bin/transmission-daemon -f -g /home/${username}
