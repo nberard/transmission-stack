@@ -33,6 +33,7 @@ if [ -z ${PASSWORD+x} ]; then
     exit 3
 fi
 
+USER_LOCAL_DIR=$USERS_DIR/$USERNAME
 
 USER_MISSING=$(id -u "$USERNAME" > /dev/null 2>&1; echo $?)
 if [ $USER_MISSING -eq 1 ]; then
@@ -43,10 +44,10 @@ if [ $USER_MISSING -eq 1 ]; then
         echo && echo -e "\e[31mthe user creation needs root privileges, please use sudo\e[0m" && echo
         exit 4
     fi
-    useradd -p $PASSWORD -u $NEXT_UID -d $USERS_DIR/$USERNAME -m $USERNAME
+    useradd -p $PASSWORD -u $NEXT_UID -d $USER_LOCAL_DIR -m $USERNAME
 fi
 USER_UID=$(grep "$USERNAME" /etc/passwd | cut -d : -f 3)
-PORT=9091
+PORT=9092
 while true; do
     netstat -tanp | grep transmission | grep $PORT > /dev/null
     if [ $? -eq 1 ]; then
@@ -55,10 +56,26 @@ while true; do
         PORT=`expr $PORT + 1`
     fi
 done
-echo $PORT
-docker build -f Dockerfile.transmission -t transmission_$USERNAME \
+
+IMAGE_NAME="transmission:$USERNAME"
+SETTINGS_PATH="$USER_LOCAL_DIR/settings.json"
+cp transmission-settings.template.json $SETTINGS_PATH
+export DOWNLOAD_DIR="/home/$USERNAME/Downloads"
+TEMP_FILE=settings.temp.json
+
+jq --arg DOWNLOAD_DIR "$DOWNLOAD_DIR" '."download-dir" = $DOWNLOAD_DIR' transmission-settings.template.json | \
+    jq --arg USERNAME "$USERNAME" '."rpc-username" = $USERNAME' | \
+    jq --arg PASSWORD "$PASSWORD" '."rpc-password" = $PASSWORD' | \
+    jq --arg DOWNLOAD_DIR "$DOWNLOAD_DIR" '."incomplete-dir" = $DOWNLOAD_DIR' > "$TEMP_FILE" && \
+    mv "$TEMP_FILE" "$SETTINGS_PATH"
+
+echo "building new docker image for user $USERNAME..."
+docker build -f Dockerfile.transmission -t $IMAGE_NAME \
         --build-arg username=$USERNAME \
         --build-arg password=$PASSWORD \
         --build-arg uid=$USER_UID \
         .
-exit 0
+CONTAINER_NAME=$IMAGE_NAME
+
+docker run -d --name transmission_$USERNAME -p $PORT:9091 -v $USER_LOCAL_DIR:/home/$USERNAME  $IMAGE_NAME
+docker logs -f transmission_$USERNAME
