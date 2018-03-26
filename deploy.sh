@@ -33,6 +33,11 @@ if [ -z ${PASSWORD+x} ]; then
     exit 3
 fi
 
+if [ ! -x jq ]; then
+    echo "missing jq extension, please install it first"
+    exit 4
+fi
+
 USER_LOCAL_DIR=$USERS_DIR/$USERNAME
 
 USER_MISSING=$(id -u "$USERNAME" > /dev/null 2>&1; echo $?)
@@ -42,12 +47,12 @@ if [ $USER_MISSING -eq 1 ]; then
     echo "user $USERNAME is missing on your system, creating it..."
     if [[ $(whoami) != "root" ]]; then
         echo && echo -e "\e[31mthe user creation needs root privileges, please use sudo\e[0m" && echo
-        exit 4
+        exit 5
     fi
     useradd -p $PASSWORD -u $NEXT_UID -d $USER_LOCAL_DIR -m $USERNAME
 fi
 USER_UID=$(grep "$USERNAME" /etc/passwd | cut -d : -f 3)
-PORT=9092
+PORT=9091
 while true; do
     netstat -tanp | grep transmission | grep $PORT > /dev/null
     if [ $? -eq 1 ]; then
@@ -78,4 +83,3 @@ docker build -f Dockerfile.transmission -t $IMAGE_NAME \
 CONTAINER_NAME=$IMAGE_NAME
 
 docker run -d --name transmission_$USERNAME -p $PORT:9091 -v $USER_LOCAL_DIR:/home/$USERNAME  $IMAGE_NAME
-docker logs -f transmission_$USERNAME
