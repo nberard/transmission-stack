@@ -33,7 +33,7 @@ if [ -z ${PASSWORD+x} ]; then
     exit 3
 fi
 
-jq '.' transmission-settings.template.json >/dev/null 2>&1 || (echo "missing jq extension, please install it first" && exit 4
+jq '.' transmission-settings.template.json >/dev/null 2>&1 || (echo "missing jq extension, please install it first" && exit 4)
 
 USER_LOCAL_DIR=$USERS_DIR/$USERNAME
 
