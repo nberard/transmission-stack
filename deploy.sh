@@ -34,6 +34,7 @@ if [ -z ${PASSWORD+x} ]; then
 fi
 
 jq '.' transmission-settings.template.json >/dev/null 2>&1 || (echo "missing jq extension, please install it first" && exit 4)
+openssl passwd -1 $PASSWORD || (echo "missing openssl extension, please install it first" && exit 5)
 
 USER_LOCAL_DIR=$USERS_DIR/$USERNAME
 
@@ -44,9 +45,9 @@ if [ $USER_MISSING -eq 1 ]; then
     echo "user $USERNAME is missing on your system, creating it..."
     if [[ $(whoami) != "root" ]]; then
         echo && echo -e "\e[31mthe user creation needs root privileges, please use sudo\e[0m" && echo
-        exit 5
+        exit 6
     fi
-    useradd -p $PASSWORD -u $NEXT_UID -d $USER_LOCAL_DIR -m $USERNAME
+    useradd -p $(openssl passwd -1 $PASSWORD) -u $NEXT_UID -d $USER_LOCAL_DIR -m $USERNAME
 fi
 USER_UID=$(grep "$USERNAME" /etc/passwd | cut -d : -f 3)
 PORT=9091
