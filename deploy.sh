@@ -77,7 +77,6 @@ docker build -f Dockerfile.transmission -t $IMAGE_NAME \
         --build-arg username=$USERNAME \
         --build-arg password=$PASSWORD \
         --build-arg uid=$USER_UID \
-        .
-CONTAINER_NAME=$IMAGE_NAME
+        . > /dev/null
 
 docker run -d --name transmission_$USERNAME -p $PORT:9091 -v $USER_LOCAL_DIR:/home/$USERNAME  $IMAGE_NAME
