@@ -24,7 +24,10 @@ tee -a /etc/samba/smb.conf << EOF
     read only = no
     writeable = yes
     locking = no
+    follow symlinks = yes
+    wide links = yes
 EOF
 adduser -D -H $USERNAME
 (echo "$PASSWORD"; sleep 1; echo "$PASSWORD" ) | smbpasswd -s -a $USERNAME
+ln -s /home/users /home/users/$USERNAME/Downloads/global
 exit 0

@@ -21,6 +21,7 @@
 #
 #======================= Global Settings =====================================
 [global]
+allow insecure wide links = yes
 
 # workgroup = NT-Domain-Name or Workgroup-Name, eg: MIDEARTH
    workgroup = MYGROUP
