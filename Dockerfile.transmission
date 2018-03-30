@@ -14,6 +14,7 @@ RUN chown $username:$username /home/$username -R
 ENV username=$username
 ENV password=$password
 USER $username
+RUN mkdir "/home/$username/Downloads"
 VOLUME /home/$username
 EXPOSE 9091
-CMD /usr/bin/transmission-daemon -f -g /home/${username}
+CMD transmission-daemon -f -g /home/${username}

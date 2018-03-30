@@ -15,7 +15,6 @@ while getopts ':d:u:h' flag; do
     *) echo "Unexpected option ${flag}" ;;
   esac
 done
-
 if [ -z ${USERS_DIR+x} ]; then
     echo "missing users dir, see usage with -h"
     exit 1
@@ -27,12 +26,14 @@ if [ -z ${USERNAME+x} ]; then
 fi
 
 USER_LOCAL_DIR=$USERS_DIR/$USERNAME
+
 if [[ $(whoami) != "root" ]]; then
-    echo && echo -e "\e[31mthe user removal needs root privileges, please use sudo\e[0m" && echo
+    echo && echo -e "\e[31mthe user removal needs root privileges, please use sudo (with -E to preserve env variables)\e[0m" && echo
     exit 3
 fi
+
 userdel $USERNAME
 rm -rf $USER_LOCAL_DIR
-docker rm -f transmission_$USERNAME > /dev/null
+docker rm -f transmission_stack_transmission_$USERNAME > /dev/null
 echo user $USERNAME successfully removed
 exit 0
