@@ -219,11 +219,3 @@
 ;   writable = yes
 ;   printable = no
 ;   create mask = 0765
-[share_touplitoui]
-    guest ok = no
-    comment = Samba share for user touplitoui
-    path = /home/users/touplitoui/Downloads
-    browsable = yes
-    read only = no
-    writeable = yes
-    locking = no

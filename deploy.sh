@@ -40,8 +40,8 @@ if [[ $(whoami) != "root" ]]; then
     exit 4
 fi
 
-jq '.' transmission-settings.template.json >/dev/null 2>&1 || (echo "missing jq extension, please install it first" && exit 4)
-openssl passwd -1 $PASSWORD || (echo "missing openssl extension, please install it first" && exit 5)
+jq '.' transmission-settings.template.json >/dev/null 2>&1 || (echo "missing jq extension, please install it first" && exit 5)
+openssl passwd -1 $PASSWORD || (echo "missing openssl extension, please install it first" && exit 6)
 
 USER_LOCAL_DIR=$USERS_DIR/$USERNAME
 
@@ -89,6 +89,8 @@ if $NEED_SAMBA; then
     SAMBA_ID=$(docker ps -f name=^/$SAMBA_IMAGE_NAME$ -q)
     if [ -z ${SAMBA_ID} ]; then
         echo "creating new samba server..."
+        cp samba/passwd.dist samba/passwd
+        cp samba/smb.conf.dist samba/smb.conf
         docker build -f Dockerfile.samba -t $SAMBA_IMAGE_NAME . > /dev/null
         docker run -d --name $SAMBA_CONTAINER_NAME \
             -p 445:445 \
