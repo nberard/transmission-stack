@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+NEED_SAMBA=false
 while getopts ':d:u:p:h:s' flag; do
   case "${flag}" in
     h)
@@ -56,7 +57,7 @@ fi
 USER_UID=$(grep "$USERNAME" /etc/passwd | cut -d : -f 3)
 PORT=9091
 while true; do
-    netstat -tanp | grep transmission | grep $PORT > /dev/null
+    netstat -tanpl | grep ":$PORT" > /dev/null
     if [ $? -eq 1 ]; then
         break
     else
@@ -115,5 +116,6 @@ echo "username: $USERNAME"
 echo "password: $PASSWORD"
 echo "access to transmission: http://$(hostname):$PORT"
 echo "access to samba share: \\$(hostname)\share_$USERNAME or smb://$USERNAME:$PASSWORD@$(hostname)/share_$USERNAME"
+echo "==========================================="
 
 exit 0
