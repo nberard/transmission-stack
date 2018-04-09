@@ -35,5 +35,7 @@ fi
 userdel $USERNAME
 rm -rf $USER_LOCAL_DIR
 docker rm -f transmission_stack_transmission_$USERNAME > /dev/null
+docker exec -it transmission_stack_samba /srv/remove_user.sh -u $USERNAME
 echo user $USERNAME successfully removed
+docker exec -it transmission_stack_samba grep "start_config_" /etc/samba/smb.conf || (docker rm -f transmission_stack_samba && echo samba instance killed as there are no users remaining)
 exit 0

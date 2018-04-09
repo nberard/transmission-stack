@@ -2,7 +2,7 @@
 while getopts ':u:p:h:i' flag; do
   case "${flag}" in
     h)
-        echo "Deploy a new transmission stack for a user"
+        echo "Add a new user to samba"
         echo " "
         echo "options:"
         echo "-h,                       show brief help"
@@ -16,6 +16,7 @@ while getopts ':u:p:h:i' flag; do
   esac
 done
 tee -a /etc/samba/smb.conf << EOF
+;start_config_$USERNAME
 [share_$USERNAME]
     guest ok = no
     comment = Samba share for user $USERNAME
@@ -26,6 +27,7 @@ tee -a /etc/samba/smb.conf << EOF
     locking = no
     follow symlinks = yes
     wide links = yes
+;end_config_$USERNAME
 EOF
 adduser -D -H $USERNAME
 (echo "$PASSWORD"; sleep 1; echo "$PASSWORD" ) | smbpasswd -s -a $USERNAME

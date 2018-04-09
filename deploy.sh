@@ -108,4 +108,12 @@ docker run -d --name transmission_stack_transmission_$USERNAME \
         -v $USER_LOCAL_DIR:/home/$USERNAME \
         $IMAGE_NAME
 
+echo "==========================================="
+echo "summary for creation of user $USERNAME"
+echo "==========================================="
+echo "username: $USERNAME"
+echo "password: $PASSWORD"
+echo "access to transmission: http://$(hostname):$PORT"
+echo "access to samba share: \\$(hostname)\share_$USERNAME or smb://$USERNAME:$PASSWORD@$(hostname)/share_$USERNAME"
+
 exit 0
