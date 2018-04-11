@@ -28,7 +28,7 @@ fi
 USER_LOCAL_DIR=$USERS_DIR/$USERNAME
 
 if [[ $(whoami) != "root" ]]; then
-    echo && echo -e "\e[31mthe user removal needs root privileges, please use sudo (with -E to preserve env variables)\e[0m" && echo
+    echo "the user removal needs root privileges, please use sudo (with -E to preserve env variables)"
     exit 3
 fi
 

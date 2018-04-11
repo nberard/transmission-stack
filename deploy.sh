@@ -40,7 +40,7 @@ if [ -z ${PASSWORD+x} ]; then
 fi
 
 if [[ $(whoami) != "root" ]]; then
-    echo && echo -e "\e[31mthe user creation needs root privileges, please use sudo (with -E to preserve env variables)\e[0m" && echo
+    echo "the user creation needs root privileges, please use sudo (with -E to preserve env variables)"
     exit 4
 fi
 
