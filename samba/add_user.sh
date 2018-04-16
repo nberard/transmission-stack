@@ -31,5 +31,5 @@ tee -a /etc/samba/smb.conf << EOF
 EOF
 adduser -D -H $USERNAME
 (echo "$PASSWORD"; sleep 1; echo "$PASSWORD" ) | smbpasswd -s -a $USERNAME
-ln -s /home/users /home/users/$USERNAME/Downloads/global
+ln -s $USERS_DIR $USERS_DIR/$USERNAME/Downloads/global
 exit 0
