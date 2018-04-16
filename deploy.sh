@@ -161,15 +161,17 @@ docker run -d --name transmission_stack_transmission_$USERNAME \
         -v $USER_LOCAL_DIR:/home/$USERNAME \
         $IMAGE_NAME
 
+HOSTNAME=${TRANSMISSION_STACK_HOSTNAME:-$(hostname)}
+
 echo
 echo "==========================================="
 echo "summary for creation of user $USERNAME"
 echo "==========================================="
 echo "username: $USERNAME"
 echo "password: $PASSWORD"
-echo "access to transmission: http://$(hostname):$PORT"
+echo "access to transmission: http://$HOSTNAME:$PORT"
 echo "subtitles downloaded every minute for language $SUBTITLES_LANGUAGE"
-echo "access to samba share: \\$(hostname)\share_$USERNAME or smb://$USERNAME:$PASSWORD@$(hostname)/share_$USERNAME"
+echo "access to samba share: \\$HOSTNAME\share_$USERNAME or smb://$USERNAME:$PASSWORD@$HOSTNAME/share_$USERNAME"
 echo "==========================================="
 
 exit 0
