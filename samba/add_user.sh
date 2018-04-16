@@ -1,17 +1,15 @@
 #!/usr/bin/env bash
-while getopts ':d:u:p:h:i' flag; do
+while getopts ':u:p:h:i' flag; do
   case "${flag}" in
     h)
         echo "Add a new user to samba"
         echo " "
         echo "options:"
         echo "-h,                       show brief help"
-        echo "-d USERSDIR               the directory where to store users"
         echo "-u USERNAME               the username to use"
         echo "-p PASSWORD               the password to use"
         exit 0
         ;;
-    d) USERS_DIR="${OPTARG}" ;;
     u) USERNAME="${OPTARG}" ;;
     p) PASSWORD="${OPTARG}" ;;
     *) echo "Unexpected option ${flag}" ;;
@@ -33,5 +31,5 @@ tee -a /etc/samba/smb.conf << EOF
 EOF
 adduser -D -H $USERNAME
 (echo "$PASSWORD"; sleep 1; echo "$PASSWORD" ) | smbpasswd -s -a $USERNAME
-ln -s $USERS_DIR $USERS_DIR/$USERNAME/Downloads/global
+ln -s /home/users /home/users/$USERNAME/Downloads/global
 exit 0

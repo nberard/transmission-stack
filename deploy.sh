@@ -119,7 +119,7 @@ if $NEED_SAMBA; then
         docker exec -it $SAMBA_CONTAINER_NAME ln -sf /etc_swap/passwd /etc/passwd
     fi
     echo " --> adding new user $USERNAME to global samba server"
-    docker exec -it $SAMBA_CONTAINER_NAME /srv/add_user.sh -u $USERNAME -p $PASSWORD -d $USERS_DIR
+    docker exec -it $SAMBA_CONTAINER_NAME /srv/add_user.sh -u $USERNAME -p $PASSWORD
 fi
 
 if $NEED_SUBTITLES; then
