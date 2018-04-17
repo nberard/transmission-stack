@@ -99,12 +99,14 @@ if $NEED_SHARE; then
     FTP_ID=$(docker ps -f name=^/$FTP_CONTAINER_NAME$ -q)
     if [ -z ${FTP_ID} ]; then
         echo " -> creating new global ftp server..."
+        cp ftp/pureftpd.passwd.dist ftp/pureftpd.passwd
         docker build -f Dockerfile.ftp -t $FTP_IMAGE_NAME .
         docker run -d --name $FTP_CONTAINER_NAME \
             -p 21:21 \
             -p 30000-30009:30000-30009 \
             -e PUBLICHOST=localhost \
             -v $USERS_DIR:/home/ftpusers \
+            -v $PWD/ftp/pure-ftpd:/etc/pure-ftpd \
             $FTP_IMAGE_NAME
     fi
     echo " --> adding new user $USERNAME to global ftp server"
