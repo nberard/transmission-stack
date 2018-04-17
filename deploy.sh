@@ -46,8 +46,7 @@ fi
 
 USER_LOCAL_DIR=$USERS_DIR/$USERNAME
 if [ -d $USER_LOCAL_DIR ]; then
-    echo "user $USERNAME already exists in $USERS_DIR folder, please remove it first with ./remove.sh -u $USERNAME"
-    exit 5
+    echo "user $USERNAME already exists in $USERS_DIR folder, we will keep his downloads"
 fi
 
 jq '.' transmission-settings.template.json >/dev/null 2>&1
