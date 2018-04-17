@@ -32,7 +32,17 @@ if [[ $(whoami) != "root" ]]; then
     exit 3
 fi
 
-#@TODO remove ftp
+FTP_ID=$(docker ps -f name=^/transmission_stack_ftpd_server$ -q)
+if [ ! -z ${FTP_ID} ]; then
+    docker exec -it transmission_stack_ftpd_server pure-pw list | grep $USERNAME && \
+        echo "removing ftp config for user $USERNAME" && docker exec -it transmission_stack_ftpd_server /usr/local/bin/remove_user.sh -u $USERNAME
+    FTP_USERS=$(docker exec -it transmission_stack_ftpd_server pure-pw list)
+    echo $FTP_USERS
+    if [ -z $FTP_USERS ]; then
+        echo "removing ftp server as there are no more users"
+        docker rm -f transmission_stack_ftpd_server
+    fi
+fi
 
 SUBFINDER_ID=$(docker ps -f name=^/transmission_stack_subfinder_$USERNAME$ -q)
 if [ ! -z ${SUBFINDER_ID} ]; then

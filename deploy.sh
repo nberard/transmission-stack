@@ -116,7 +116,7 @@ if $NEED_SHARE; then
             $FTP_IMAGE_NAME
     fi
     echo " --> adding new user $USERNAME to global ftp server"
-    docker exec -it $FTP_CONTAINER_NAME /usr/local/bin/add_user.sh -u $USER -p $PASSWORD
+    docker exec -it $FTP_CONTAINER_NAME /usr/local/bin/add_user.sh -u $USERNAME -p $PASSWORD
 
 fi
 
