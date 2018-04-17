@@ -24,7 +24,7 @@
 allow insecure wide links = yes
 
 # workgroup = NT-Domain-Name or Workgroup-Name, eg: MIDEARTH
-   workgroup = MYGROUP
+   workgroup = WORKGROUP
 
 # server string is the equivalent of the NT Description field
    server string = Samba Server
