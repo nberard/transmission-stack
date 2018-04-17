@@ -1,15 +1,10 @@
-FROM alpine:3.7
+FROM debian:7
 MAINTAINER Nicolas Berard [berard.nicolas@gmail.com]
 
-RUN apk add --update \
+RUN apt-get update && apt-get install \
     bash \
-    samba-common-tools \
-    samba-client \
-    samba-server \
+    samba \
     && rm -rf /var/cache/apk/*
-
-HEALTHCHECK --interval=60s --timeout=15s \
-             CMD smbclient -L '\\localhost\' -U 'guest%'
 
 COPY samba/add_user.sh /srv/
 COPY samba/remove_user.sh /srv/
