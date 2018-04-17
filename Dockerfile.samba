@@ -1,7 +1,8 @@
 FROM debian:7
 MAINTAINER Nicolas Berard [berard.nicolas@gmail.com]
 
-RUN apt-get update && apt-get install \
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get -yq install \
     bash \
     samba \
     && rm -rf /var/cache/apk/*
