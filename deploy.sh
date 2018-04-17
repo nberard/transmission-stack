@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-NEED_SAMBA=false
+NEED_SHARE=false
 NEED_SUBTITLES=false
 while getopts ':d:u:p:hst:' flag; do
   case "${flag}" in
@@ -11,14 +11,14 @@ while getopts ':d:u:p:hst:' flag; do
         echo "-d USERSDIR               the directory where to store users"
         echo "-u USERNAME               the username to use"
         echo "-p PASSWORD               the password to use"
-        echo "-s                        share downloads via samba"
+        echo "-s                        share downloads via ftp"
         echo "-t LANGUAGE               add subtitles finder for language"
         exit 0
         ;;
     d) USERS_DIR="${OPTARG}" ;;
     u) USERNAME="${OPTARG}" ;;
     p) PASSWORD="${OPTARG}" ;;
-    s) NEED_SAMBA=true ;;
+    s) NEED_SHARE=true ;;
     t) NEED_SUBTITLES=true; SUBTITLES_LANGUAGE="${OPTARG}" ;;
     *) echo "Unexpected option ${flag}" ;;
   esac
@@ -101,25 +101,23 @@ jq --arg DOWNLOAD_DIR "$DOWNLOAD_DIR" '."download-dir" = $DOWNLOAD_DIR' transmis
     jq --arg DOWNLOAD_DIR "$DOWNLOAD_DIR" '."incomplete-dir" = $DOWNLOAD_DIR' > "$TEMP_FILE" && \
     mv "$TEMP_FILE" "$SETTINGS_PATH"
 
-if $NEED_SAMBA; then
-    SAMBA_IMAGE_NAME="transmission_stack_samba"
-    SAMBA_CONTAINER_NAME=$SAMBA_IMAGE_NAME
-    SAMBA_ID=$(docker ps -f name=^/$SAMBA_IMAGE_NAME$ -q)
-    if [ -z ${SAMBA_ID} ]; then
-        echo " -> creating new global samba server..."
-        cp samba/passwd.dist samba/passwd
-        cp samba/smb.conf.dist samba/smb.conf
-        docker build -f Dockerfile.samba -t $SAMBA_IMAGE_NAME . > /dev/null
-        docker run -d --name $SAMBA_CONTAINER_NAME \
-            -p 445:445 \
-            -v $PWD/samba/smb.conf:/etc/samba/smb.conf \
-            -v $PWD/samba:/etc_swap \
-            -v $USERS_DIR:/home/users \
-            $SAMBA_IMAGE_NAME
-        docker exec -it $SAMBA_CONTAINER_NAME ln -sf /etc_swap/passwd /etc/passwd
+if $NEED_SHARE; then
+    FTP_IMAGE_NAME="transmission_stack_ftpd_server"
+    FTP_CONTAINER_NAME=$FTP_IMAGE_NAME
+    FTP_ID=$(docker ps -f name=^/$FTP_CONTAINER_NAME$ -q)
+    if [ -z ${FTP_ID} ]; then
+        echo " -> creating new global ftp server..."
+        docker build -f Dockerfile.ftp -t $FTP_IMAGE_NAME .
+        docker run -d --name $FTP_CONTAINER_NAME \
+            -p 21:21 \
+            -p 30000-30009:30000-30009 \
+            -e PUBLICHOST=localhost \
+            -v $USERS_DIR:/home/ftpusers \
+            $FTP_IMAGE_NAME
     fi
-    echo " --> adding new user $USERNAME to global samba server"
-    docker exec -it $SAMBA_CONTAINER_NAME /srv/add_user.sh -u $USERNAME -p $PASSWORD
+    echo " --> adding new user $USERNAME to global ftp server"
+    docker exec -it $FTP_CONTAINER_NAME /usr/local/bin/add_user.sh -u $USER -p $PASSWORD
+
 fi
 
 if $NEED_SUBTITLES; then

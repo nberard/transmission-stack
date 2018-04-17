@@ -32,20 +32,14 @@ if [[ $(whoami) != "root" ]]; then
     exit 3
 fi
 
-echo "removing transmission config for user $USERNAME"
-SAMBA_ID=$(docker ps -f name=^/transmission_stack_samba$ -q)
-if [ ! -z ${SAMBA_ID} ]; then
-    echo "removing samba config for user $USERNAME"
-    docker exec -it transmission_stack_samba grep "start_config_" /etc/samba/smb.conf > /dev/null && \
-        docker exec -it transmission_stack_samba /srv/remove_user.sh -u $USERNAME
-    docker exec -it transmission_stack_samba grep "start_config_" /etc/samba/smb.conf || \
-        (docker rm -f transmission_stack_samba && echo "samba instance killed as there are no users remaining")
-fi
+#@TODO remove ftp
+
 SUBFINDER_ID=$(docker ps -f name=^/transmission_stack_subfinder_$USERNAME$ -q)
 if [ ! -z ${SUBFINDER_ID} ]; then
     echo "removing subfinder config for user $USERNAME"
     docker rm -f $SUBFINDER_ID
 fi
+echo "removing transmission config for user $USERNAME"
 userdel $USERNAME
 rm -rf $USER_LOCAL_DIR
 docker rm -f transmission_stack_transmission_$USERNAME > /dev/null
