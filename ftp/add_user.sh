@@ -16,5 +16,5 @@ while getopts ':u:p:h:i' flag; do
   esac
 done
 (echo "$PASSWORD"; sleep 1; echo "$PASSWORD" ) | \
-    pure-pw useradd $USERNAME -m -u ftpuser -d /home/ftpusers/$USERNAME
+    pure-pw useradd $USERNAME -m -u ftpuser -d /home/ftpusers/$USERNAME/Downloads
 exit 0
