@@ -100,13 +100,11 @@ if $NEED_SAMBA; then
     SAMBA_ID=$(docker ps -f name=^/$SAMBA_IMAGE_NAME$ -q)
     if [ -z ${SAMBA_ID} ]; then
         echo " -> creating new global samba server..."
-        cp samba/passwd.dist samba/passwd
         cp samba/smb.ms.conf.dist samba/smb.conf
         docker build -f Dockerfile.samba -t $SAMBA_IMAGE_NAME .
         docker run -d --name $SAMBA_CONTAINER_NAME \
             -p 445:445 \
             -v $PWD/samba/smb.conf:/etc/samba/smb.conf \
-            -v $PWD/samba/passwd:/etc/passwd \
             -v $USERS_DIR:/home/users \
             $SAMBA_IMAGE_NAME
     fi

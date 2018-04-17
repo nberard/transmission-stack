@@ -29,7 +29,7 @@ done
 #    wide links = yes
 #;end_config_$USERNAME
 #EOF
-adduser -D -H $USERNAME
+useradd -d /home/users/touplitoui touplitoui
 (echo "$PASSWORD"; sleep 1; echo "$PASSWORD" ) | smbpasswd -s -a $USERNAME
 #ln -s /home/users /home/users/$USERNAME/Downloads/global
 exit 0
