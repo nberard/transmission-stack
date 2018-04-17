@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-while getopts ':u:p:h:i' flag; do
+while getopts ':u:h:i' flag; do
   case "${flag}" in
     h)
         echo "Add a new user to samba"
@@ -10,8 +10,8 @@ while getopts ':u:p:h:i' flag; do
         exit 0
         ;;
     u) USERNAME="${OPTARG}" ;;
-    p) PASSWORD="${OPTARG}" ;;
     *) echo "Unexpected option ${flag}" ;;
   esac
 done
+pure-pw userdel $USERNAME -m
 exit 0
