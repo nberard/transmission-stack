@@ -1,0 +1,5 @@
+FROM stilliard/pure-ftpd:hardened
+MAINTAINER Nicolas Berard [berard.nicolas@gmail.com]
+
+COPY ftp/add_user.sh /usr/local/bin/
+COPY ftp/remove_user.sh /usr/local/bin/
