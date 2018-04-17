@@ -164,7 +164,7 @@ echo "username: $USERNAME"
 echo "password: $PASSWORD"
 echo "access to transmission: http://$HOSTNAME:$PORT"
 echo "subtitles downloaded every minute for language $SUBTITLES_LANGUAGE"
-echo "access to samba share: \\$HOSTNAME\share_$USERNAME or smb://$USERNAME:$PASSWORD@$HOSTNAME/share_$USERNAME"
+echo "access to samba share: \\\\$HOSTNAME\share_$USERNAME or smb://$USERNAME:$PASSWORD@$HOSTNAME/share_$USERNAME"
 echo "==========================================="
 
 exit 0
