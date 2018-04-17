@@ -106,10 +106,9 @@ if $NEED_SAMBA; then
         docker run -d --name $SAMBA_CONTAINER_NAME \
             -p 445:445 \
             -v $PWD/samba/smb.conf:/etc/samba/smb.conf \
-            -v $PWD/samba:/etc_swap \
+            -v $PWD/samba/passwd:/etc/passwd \
             -v $USERS_DIR:/home/users \
             $SAMBA_IMAGE_NAME
-        docker exec -it $SAMBA_CONTAINER_NAME ln -sf /etc_swap/passwd /etc/passwd
     fi
     echo " --> adding new user $USERNAME to global samba server"
     docker exec -it $SAMBA_CONTAINER_NAME /srv/add_user.sh -u $USERNAME -p $PASSWORD
