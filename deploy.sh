@@ -99,7 +99,6 @@ if $NEED_SHARE; then
     FTP_ID=$(docker ps -f name=^/$FTP_CONTAINER_NAME$ -q)
     if [ -z ${FTP_ID} ]; then
         echo " -> creating new global ftp server..."
-        cp ftp/pureftpd.passwd.dist ftp/pureftpd.passwd
         docker build -f Dockerfile.ftp -t $FTP_IMAGE_NAME .
         docker run -d --name $FTP_CONTAINER_NAME \
             -p 21:21 \
