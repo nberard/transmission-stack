@@ -270,7 +270,7 @@
    writeable = yes
    locking = no
    username = touplitoui
-   path = /home/users/touplitoui
+   path = /home/users/touplitoui/Downloads
    guest ok = no
 
 # Un-comment the following and create the netlogon directory for Domain Logons
