@@ -169,7 +169,13 @@ echo "username: $USERNAME"
 echo "password: $PASSWORD"
 echo "access to transmission: http://$HOSTNAME:$PORT"
 echo "subtitles downloaded every minute for language $SUBTITLES_LANGUAGE"
-echo "access to samba share: \\\\$HOSTNAME\share_$USERNAME or smb://$USERNAME:$PASSWORD@$HOSTNAME/share_$USERNAME"
+echo "access to your downloads:"
+echo "- FTP with : ftp://$USER:$PASSWORD@$HOSTNAME"
+echo "- SSHFS"
+echo "--> on windows (with https://github.com/billziss-gh/sshfs-win): net use z: \\sshfs\$USERNAME@$HOSTNAME\Downloads $PASSWORD"
+echo "--> on linux: echo $PASSWORD | sshfs -o allow_other $USERNAME@$HOSTNAME:Downloads /target/downloads"
 echo "==========================================="
+
+exit 0
 
 exit 0
