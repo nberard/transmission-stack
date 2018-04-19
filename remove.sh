@@ -41,8 +41,8 @@ FTP_ID=$(docker ps -f name=^/transmission_stack_ftpd_server$ -q)
 if [ ! -z ${FTP_ID} ]; then
     docker exec -it transmission_stack_ftpd_server pure-pw list | grep $USERNAME && \
         echo "removing ftp config for user $USERNAME" && docker exec -it transmission_stack_ftpd_server /usr/local/bin/remove_user.sh -u $USERNAME
-    FTP_USERS=$(docker exec -it transmission_stack_ftpd_server pure-pw list)
-    if [ -z $FTP_USERS ]; then
+    FTP_USERS=$(docker exec -it transmission_stack_ftpd_server pure-pw list | wc -l)
+    if [ $FTP_USERS = 0 ]; then
         echo "removing ftp server as there are no more users"
         docker rm -f transmission_stack_ftpd_server
     fi
