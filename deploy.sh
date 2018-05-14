@@ -90,15 +90,17 @@ echo " -> using port number $PORT for new stack"
 
 IMAGE_NAME="transmission_stack_transmission:$USERNAME"
 SETTINGS_PATH="$USER_LOCAL_DIR/settings.json"
-cp transmission-settings.template.json $SETTINGS_PATH
-export DOWNLOAD_DIR="/home/$USERNAME/Downloads"
-TEMP_FILE=settings.temp.json
+if [ ! -f $SETTINGS_PATH ]; then
+    cp transmission-settings.template.json $SETTINGS_PATH
+    export DOWNLOAD_DIR="/home/$USERNAME/Downloads"
+    TEMP_FILE=settings.temp.json
 
-jq --arg DOWNLOAD_DIR "$DOWNLOAD_DIR" '."download-dir" = $DOWNLOAD_DIR' transmission-settings.template.json | \
-    jq --arg USERNAME "$USERNAME" '."rpc-username" = $USERNAME' | \
-    jq --arg PASSWORD "$PASSWORD" '."rpc-password" = $PASSWORD' | \
-    jq --arg DOWNLOAD_DIR "$DOWNLOAD_DIR" '."incomplete-dir" = $DOWNLOAD_DIR' > "$TEMP_FILE" && \
-    mv "$TEMP_FILE" "$SETTINGS_PATH"
+    jq --arg DOWNLOAD_DIR "$DOWNLOAD_DIR" '."download-dir" = $DOWNLOAD_DIR' transmission-settings.template.json | \
+        jq --arg USERNAME "$USERNAME" '."rpc-username" = $USERNAME' | \
+        jq --arg PASSWORD "$PASSWORD" '."rpc-password" = $PASSWORD' | \
+        jq --arg DOWNLOAD_DIR "$DOWNLOAD_DIR" '."incomplete-dir" = $DOWNLOAD_DIR' > "$TEMP_FILE" && \
+        mv "$TEMP_FILE" "$SETTINGS_PATH"
+fi
 
 if $NEED_SHARE; then
     FTP_IMAGE_NAME="transmission_stack_ftpd_server"
@@ -175,7 +177,5 @@ echo "- SSHFS"
 echo "--> on windows (with https://github.com/billziss-gh/sshfs-win): net use z: \\\\sshfs\\$USERNAME@$HOSTNAME\Downloads $PASSWORD"
 echo "--> on linux: echo $PASSWORD | sshfs -o allow_other $USERNAME@$HOSTNAME:Downloads /target/downloads"
 echo "==========================================="
-
-exit 0
 
 exit 0

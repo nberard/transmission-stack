@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 WIPE_DATA=false
-while getopts ':d:u:hw' flag; do
+WIPE_CONFIG=false
+while getopts ':d:u:hwc' flag; do
   case "${flag}" in
     h)
         echo "Remove a new transmission stack for a user"
@@ -10,11 +11,13 @@ while getopts ':d:u:hw' flag; do
         echo "-d USERSDIR               the directory where to store users"
         echo "-u USERNAME               the username to use"
         echo "-w                        wipe all downloads data"
+        echo "-c                        remove transmission config file"
         exit 0
         ;;
     d) USERS_DIR="${OPTARG}" ;;
     u) USERNAME="${OPTARG}" ;;
     w) WIPE_DATA=true ;;
+    c) WIPE_CONFIG=true ;;
     *) echo "Unexpected option ${flag}" ;;
   esac
 done
@@ -57,6 +60,10 @@ fi
 if $WIPE_DATA; then
     userdel $USERNAME
     rm -rf $USER_LOCAL_DIR
+fi
+
+if $WIPE_CONFIG; then
+    rm -f $USER_LOCAL_DIR/settings.json
 fi
 
 echo "removing transmission config for user $USERNAME"
