@@ -75,6 +75,8 @@ if [ $USER_MISSING -eq 1 ]; then
     echo " -> user $USERNAME is missing on your system, creating it"
     useradd -p $(openssl passwd -1 $PASSWORD) -u $NEXT_UID -d $USER_LOCAL_DIR -m $USERNAME
     mkdir $USER_LOCAL_DIR/Downloads && chown $USERNAME:$USERNAME $USER_LOCAL_DIR/Downloads
+else
+    NEXT_UID=$(id -u "$USERNAME")
 fi
 USER_UID=$(grep "$USERNAME" /etc/passwd | cut -d : -f 3)
 PORT=9091
