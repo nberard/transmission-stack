@@ -1,4 +1,5 @@
 FROM armhf/alpine
+MAINTAINER Nicolas Berard [berard.nicolas@gmail.com]
 
 WORKDIR /usr/local/share
 RUN apk update 
