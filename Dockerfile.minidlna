@@ -15,4 +15,7 @@ RUN ./configure
 RUN make
 RUN make install
 
+EXPOSE 8200
+VOLUME ["/etc/minidlna.conf", "/mnt/downloads", "/var/cache/minidlna"]
+
 CMD ["minidlnad", "-d"]
