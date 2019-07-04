@@ -1,0 +1,18 @@
+FROM armhf/alpine
+
+WORKDIR /usr/local/share
+RUN apk update 
+RUN apk add ca-certificates
+RUN update-ca-certificates
+RUN apk add wget 
+RUN wget https://freefr.dl.sourceforge.net/project/minidlna/minidlna/1.2.1/minidlna-1.2.1.tar.gz
+RUN tar -xvf minidlna-1.2.1.tar.gz
+
+RUN apk add build-base bsd-compat-headers 
+RUN apk add ffmpeg-dev jpeg-dev zlib-dev sqlite-dev libexif-dev libid3tag-dev flac-dev libvorbis-dev libogg-dev
+WORKDIR ./minidlna-1.2.1
+RUN ./configure
+RUN make
+RUN make install
+
+CMD ["minidlnad", "-d"]
