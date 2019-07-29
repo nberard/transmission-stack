@@ -1,0 +1,14 @@
+version: '3'
+
+services:
+  minidlna:
+    image: minidlna:1.2.1
+    volumes:
+     - ./minidlna.conf:/etc/minidlna.conf
+     - ./cache:/var/cache/minidlna
+     - /home/pi/downloads:/mnt/downloads
+    command: "minidlnad -r -d"
+    ports:
+     - 8200:8200
+     - 1900:1900/udp
+
