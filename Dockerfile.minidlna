@@ -17,6 +17,7 @@ RUN make
 RUN make install
 
 EXPOSE 8200
+EXPOSE 1900/udp
 VOLUME ["/etc/minidlna.conf", "/mnt/downloads", "/var/cache/minidlna"]
 
 CMD ["minidlnad", "-d"]
