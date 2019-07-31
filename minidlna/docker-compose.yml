@@ -1,4 +1,4 @@
-version: '3'
+version: '3.4'
 
 services:
   minidlna:
@@ -8,7 +8,18 @@ services:
      - ./cache:/var/cache/minidlna
      - /home/pi/downloads:/mnt/downloads
     command: "minidlnad -r -d"
+    networks: 
+     - upnp
     ports:
-     - 8200:8200
-     - 1900:1900/udp
-
+      - target: 8200
+        published: 8200
+        protocol: tcp
+        mode: host
+      - target: 1900
+        published: 1900
+        protocol: udp
+        mode: host
+networks:
+  upnp:
+    external:
+      name: host

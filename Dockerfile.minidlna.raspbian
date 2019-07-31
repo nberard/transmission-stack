@@ -1,3 +1,27 @@
 FROM raspbian/stretch
+MAINTAINER Nicolas Berard [berard.nicolas@gmail.com]
+
+WORKDIR /usr/local/share
+
 RUN apt-get update
-RUN apt-get install build-base libavutil-dev 
+RUN apt-get install wget
+RUN wget https://freefr.dl.sourceforge.net/project/minidlna/minidlna/1.2.1/minidlna-1.2.1.tar.gz
+RUN tar -xvf minidlna-1.2.1.tar.gz
+RUN apt-get install -y build-essential
+RUN apt-get install -y libavutil-dev
+RUN apt-get install -y ffmpeg libjpeg-dev zlib1g-dev libsqlite0-dev libexif-dev libid3tag0-dev libflac-dev libvorbis-dev libogg-dev
+RUN apt-get install -y libavcodec-dev
+RUN apt-get install -y libavformat-dev
+RUN apt-get install -y libsqlite3-dev
+RUN apt-get install -y gettext
+WORKDIR ./minidlna-1.2.1
+RUN ./configure
+RUN make
+RUN make install
+
+EXPOSE 8200
+EXPOSE 1900/udp
+VOLUME ["/etc/minidlna.conf", "/mnt/downloads", "/var/cache/minidlna"]
+
+CMD ["minidlnad", "-d"]
+
