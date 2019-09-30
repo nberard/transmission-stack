@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+
 NEED_SHARE=false
 NEED_SUBTITLES=false
 while getopts ':d:u:p:hst:' flag; do
@@ -68,13 +69,21 @@ if $NEED_SUBTITLES; then
     fi
 fi
 
+GID=$(grep "transmission-users" /etc/group | cut -d':' -f3)
+if [ -z ${GID} ]; then
+    echo " -> creating group transmission-users"
+    addgroup --system --gid 666 transmission-users
+    GID=666
+fi
+
+
 USER_MISSING=$(id -u "$USERNAME" > /dev/null 2>&1; echo $?)
 if [ $USER_MISSING -eq 1 ]; then
     LAST_UID=$(cat /etc/passwd |grep -v nologin|grep -v nobody|cut -d ":" -f 3 |sort -n | tail -1)
     NEXT_UID=`expr $LAST_UID + 1`
     echo " -> user $USERNAME is missing on your system, creating it"
-    useradd -p $(openssl passwd -1 $PASSWORD) -u $NEXT_UID -d $USER_LOCAL_DIR -m $USERNAME
-    mkdir $USER_LOCAL_DIR/Downloads && chown $USERNAME:$USERNAME $USER_LOCAL_DIR/Downloads
+    useradd -p $(openssl passwd -1 $PASSWORD) -u $NEXT_UID -d $USER_LOCAL_DIR -m -g $GID $USERNAME
+    mkdir $USER_LOCAL_DIR/Downloads && chown $USERNAME:$GID $USER_LOCAL_DIR/Downloads
 else
     NEXT_UID=$(id -u "$USERNAME")
 fi
@@ -154,6 +163,7 @@ echo " -> building new transmission docker image for user $USERNAME"
 docker build -f Dockerfile.transmission -t $IMAGE_NAME \
         --build-arg username=$USERNAME \
         --build-arg password=$PASSWORD \
+        --build-arg gid=$GID \
         --build-arg uid=$USER_UID \
         . > /dev/null
 

@@ -9,8 +9,10 @@ RUN apk add --update \
 ARG username
 ARG password
 ARG uid
-RUN adduser -u $uid -D -h "/home/$username" $username
-RUN chown $username:$username /home/$username -R
+ARG gid
+RUN addgroup -g $gid -S transmission-users
+RUN adduser -u $uid -D -h "/home/$username" -G transmission-users $username
+RUN chown $username:$gid /home/$username -R
 ENV username=$username
 ENV password=$password
 USER $username
