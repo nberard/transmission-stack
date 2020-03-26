@@ -26,8 +26,7 @@ while getopts ':d:u:p:hst:' flag; do
 done
 
 if [ -z ${USERS_DIR+x} ]; then
-    echo "missing users dir, see usage with -h"
-    exit 1
+    USERS_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )/users"
 fi
 
 if [ -z ${USERNAME+x} ]; then
