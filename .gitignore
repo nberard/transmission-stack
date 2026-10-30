@@ -1,0 +1,5 @@
+# Données locales du serveur : jamais sur GitHub
+.env
+users/
+subfinder/
+minidlna/cache/
