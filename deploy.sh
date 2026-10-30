@@ -2,7 +2,7 @@
 
 NEED_SHARE=false
 NEED_SUBTITLES=false
-while getopts ':d:u:p:hst:' flag; do
+while getopts ':d:u:p:hst:H:C:' flag; do
   case "${flag}" in
     h)
         echo "Deploy a new transmission stack for a user"
@@ -14,6 +14,12 @@ while getopts ':d:u:p:hst:' flag; do
         echo "-p PASSWORD               the password to use"
         echo "-s                        share downloads via ftp"
         echo "-t LANGUAGE               add subtitles finder for language"
+        echo "-H DOMAIN                 HTTPS through Caddy on https://USERNAME.DOMAIN (no public port)"
+        echo "-C CADDY_SITES_DIR        Caddy sites folder (default: ~/docker/clear-soken/proxy/sites of the sudo user)"
+        echo " "
+        echo "Running it again for an existing user recreates his container (downloads and settings are kept);"
+        echo "the password is then only needed with -s. Example, to move a user to HTTPS:"
+        echo "  sudo ./deploy.sh -u psycho -H touplitoui.me"
         exit 0
         ;;
     d) USERS_DIR="${OPTARG}" ;;
@@ -21,6 +27,8 @@ while getopts ':d:u:p:hst:' flag; do
     p) PASSWORD="${OPTARG}" ;;
     s) NEED_SHARE=true ;;
     t) NEED_SUBTITLES=true; SUBTITLES_LANGUAGE="${OPTARG}" ;;
+    H) DOMAIN="${OPTARG}" ;;
+    C) CADDY_SITES_DIR="${OPTARG}" ;;
     *) echo "Unexpected option ${flag}" ;;
   esac
 done
@@ -34,10 +42,6 @@ if [ -z ${USERNAME+x} ]; then
     exit 2
 fi
 
-if [ -z ${PASSWORD+x} ]; then
-    echo "missing password, see usage with -h"
-    exit 3
-fi
 
 if [[ $(whoami) != "root" ]]; then
     echo "the user creation needs root privileges, please use sudo (with -E to preserve env variables)"
@@ -49,13 +53,32 @@ if [ -d $USER_LOCAL_DIR ]; then
     echo "user $USERNAME already exists in $USERS_DIR folder, we will keep his downloads"
 fi
 
+# The password is only needed to create the account, the Transmission settings or the FTP user
+if [ -z "$PASSWORD" ] && { ! id -u "$USERNAME" >/dev/null 2>&1 || [ ! -f "$USER_LOCAL_DIR/settings.json" ] || $NEED_SHARE; }; then
+    echo "missing password, see usage with -h"
+    exit 3
+fi
+
+if [ -n "$DOMAIN" ]; then
+    SUDO_HOME=$(getent passwd "${SUDO_USER:-root}" | cut -d: -f6)
+    CADDY_SITES_DIR=${CADDY_SITES_DIR:-$SUDO_HOME/docker/clear-soken/proxy/sites}
+    if [ ! -d "$CADDY_SITES_DIR" ]; then
+        echo "Caddy sites folder not found: $CADDY_SITES_DIR (use -C)"
+        exit 9
+    fi
+    if ! docker network inspect proxy >/dev/null 2>&1; then
+        echo "Docker network 'proxy' not found (it is created by make proxy in clear-soken)"
+        exit 9
+    fi
+fi
+
 jq '.' transmission-settings.template.json >/dev/null 2>&1
 if [ ! $? -eq 0 ]; then
     echo "missing jq extension, please install it first"
     exit 6
 fi
 
-openssl passwd -1 $PASSWORD >/dev/null 2>&1
+openssl version >/dev/null 2>&1   # (openssl passwd sans mot de passe attendrait une saisie au clavier)
 if [ ! $? -eq 0 ]; then
     echo "missing openssl extension, please install it first"
     exit 7
@@ -90,7 +113,7 @@ else
 fi
 USER_UID=$(grep "$USERNAME" /etc/passwd | cut -d : -f 3)
 PORT=9091
-while true; do
+while [ -z "$DOMAIN" ]; do
     netstat -tanpl | grep ":$PORT" > /dev/null
     if [ $? -eq 1 ]; then
         break
@@ -98,7 +121,7 @@ while true; do
         PORT=`expr $PORT + 1`
     fi
 done
-echo " -> using port number $PORT for new stack"
+[ -z "$DOMAIN" ] && echo " -> using port number $PORT for new stack"
 
 IMAGE_NAME="transmission_stack_transmission:$USERNAME"
 SETTINGS_PATH="$USER_LOCAL_DIR/settings.json"
@@ -168,11 +191,56 @@ docker build -f Dockerfile.transmission -t $IMAGE_NAME \
         --build-arg uid=$USER_UID \
         . > /dev/null
 
+CONTAINER_NAME=transmission_stack_transmission_$USERNAME
+if docker ps -a -q -f name="^/$CONTAINER_NAME$" | grep -q .; then
+    # Stopped first: Transmission rewrites settings.json when it exits
+    echo " --> replacing existing transmission container (downloads and settings are kept)"
+    docker rm -f "$CONTAINER_NAME" > /dev/null
+fi
+
 echo " --> deploying new transmission daemon"
-docker run -d --name transmission_stack_transmission_$USERNAME \
-        -p $PORT:9091 \
-        -v $USER_LOCAL_DIR:/home/$USERNAME \
-        $IMAGE_NAME
+if [ -n "$DOMAIN" ]; then
+    HOST="$USERNAME.$DOMAIN"
+    # Transmission refuses requests whose Host header it does not know (DNS rebinding protection)
+    jq --arg HOST "$HOST" '."rpc-host-whitelist" = $HOST | ."rpc-host-whitelist-enabled" = true' \
+        "$SETTINGS_PATH" > settings.temp.json && mv settings.temp.json "$SETTINGS_PATH"
+    chown "$USERNAME:$GID" "$SETTINGS_PATH"
+    docker run -d --name "$CONTAINER_NAME" --restart unless-stopped \
+            --network proxy \
+            -v $USER_LOCAL_DIR:/home/$USERNAME \
+            $IMAGE_NAME > /dev/null
+
+    SITE_FILE="$CADDY_SITES_DIR/transmission-$USERNAME.caddy"
+    cat > "$SITE_FILE" << CADDY
+# Transmission de $USERNAME (créé par transmission-stack/deploy.sh -H)
+$HOST {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		X-Robots-Tag "noindex, nofollow"
+		-Server
+	}
+	redir / /transmission/web/
+	reverse_proxy $CONTAINER_NAME:9091
+}
+CADDY
+    if docker exec caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile > /dev/null 2>&1; then
+        echo " --> https://$HOST published through Caddy"
+    else
+        rm -f "$SITE_FILE"
+        docker exec caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile > /dev/null 2>&1
+        echo " !! Caddy refused the new site, removed $SITE_FILE (check: docker logs caddy)"
+    fi
+    TRANSMISSION_URL="https://$HOST/"
+else
+    docker run -d --name "$CONTAINER_NAME" --restart unless-stopped \
+            -p $PORT:9091 \
+            -v $USER_LOCAL_DIR:/home/$USERNAME \
+            $IMAGE_NAME > /dev/null
+    TRANSMISSION_URL="http://${TRANSMISSION_STACK_HOSTNAME:-$(hostname)}:$PORT (unencrypted: prefer -H DOMAIN)"
+fi
 
 HOSTNAME=${TRANSMISSION_STACK_HOSTNAME:-$(hostname)}
 
@@ -181,11 +249,12 @@ echo "==========================================="
 echo "summary for creation of user $USERNAME"
 echo "==========================================="
 echo "username: $USERNAME"
-echo "password: $PASSWORD"
-echo "access to transmission: http://$HOSTNAME:$PORT"
-echo "subtitles downloaded every minute for language $SUBTITLES_LANGUAGE"
+[ -n "$PASSWORD" ] && echo "password: $PASSWORD"
+echo "access to transmission: $TRANSMISSION_URL"
+$NEED_SUBTITLES && echo "subtitles downloaded every minute for language $SUBTITLES_LANGUAGE"
 echo "access to your downloads:"
-echo "- FTP with : ftp://$USERNAME:$PASSWORD@$HOSTNAME"
+$NEED_SHARE && echo "- FTP (unencrypted) with : ftp://$USERNAME:$PASSWORD@$HOSTNAME"
+echo "- SFTP (FileZilla, WinSCP) : sftp://$USERNAME@$HOSTNAME"
 echo "- SSHFS"
 echo "--> on windows (with https://github.com/billziss-gh/sshfs-win): net use z: \\\\sshfs\\$USERNAME@$HOSTNAME\Downloads $PASSWORD"
 echo "--> on linux: echo $PASSWORD | sshfs -o allow_other $USERNAME@$HOSTNAME:Downloads /target/downloads"
