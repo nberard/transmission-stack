@@ -83,8 +83,7 @@ if [ $USER_MISSING -eq 1 ]; then
     LAST_UID=${LAST_UID:-999}
     NEXT_UID=`expr $LAST_UID + 1`
     echo " -> user $USERNAME is missing on your system, creating it"
-    # Compte sans shell : il sert seulement de propriétaire aux fichiers (Transmission, FTP), pas à se connecter en SSH
-    useradd -s /usr/sbin/nologin -p $(openssl passwd -1 $PASSWORD) -u $NEXT_UID -d $USER_LOCAL_DIR -m -g $GID $USERNAME
+    useradd -p $(openssl passwd -1 $PASSWORD) -u $NEXT_UID -d $USER_LOCAL_DIR -m -g $GID $USERNAME
     mkdir $USER_LOCAL_DIR/Downloads && chown $USERNAME:$GID $USER_LOCAL_DIR/Downloads
 else
     NEXT_UID=$(id -u "$USERNAME")
