@@ -78,7 +78,9 @@ fi
 
 USER_MISSING=$(id -u "$USERNAME" > /dev/null 2>&1; echo $?)
 if [ $USER_MISSING -eq 1 ]; then
-    LAST_UID=$(cat /etc/passwd |grep -v nologin|grep -v nobody|cut -d ":" -f 3 |sort -n | tail -1)
+    # Plus grand UID utilisateur (comptes nologin compris, sinon deux comptes auraient le même UID)
+    LAST_UID=$(awk -F: '$3 >= 1000 && $3 < 60000 {print $3}' /etc/passwd | sort -n | tail -1)
+    LAST_UID=${LAST_UID:-999}
     NEXT_UID=`expr $LAST_UID + 1`
     echo " -> user $USERNAME is missing on your system, creating it"
     # Compte sans shell : il sert seulement de propriétaire aux fichiers (Transmission, FTP), pas à se connecter en SSH
