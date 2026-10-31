@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Téléchargements</title>
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <main id="login" class="login" hidden>
+    <form id="login-form" class="card login-card">
+      <img src="/icon.svg" alt="" width="48" height="48">
+      <h1>Téléchargements</h1>
+      <p class="muted">Connecte-toi avec ton compte de pote.</p>
+      <label>Identifiant <input name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required></label>
+      <label>Mot de passe <input name="password" type="password" autocomplete="current-password" required></label>
+      <p class="error" id="login-error" role="alert" hidden></p>
+      <button class="btn primary" type="submit">Se connecter</button>
+    </form>
+  </main>
+
+  <div id="app" hidden>
+    <header class="top">
+      <div class="brand"><img src="/icon.svg" alt="" width="28" height="28"> Téléchargements</div>
+      <nav class="tabs" aria-label="Sections">
+        <a href="#downloads" data-tab="downloads">Mes torrents</a>
+        <a href="#files" data-tab="files">Mes fichiers</a>
+        <a href="#search" data-tab="search">Chercher</a>
+      </nav>
+      <div class="who"><span id="who"></span> <button class="btn link" id="logout" type="button">Déconnexion</button></div>
+    </header>
+
+    <main class="content">
+      <section id="link-card" class="card" hidden>
+        <h2>Relie ton Transmission</h2>
+        <p class="muted" id="link-help">Ton compte n'est pas encore relié à un Transmission du serveur. Donne son identifiant et son mot de passe une fois : il est gardé chiffré avec ton mot de passe de pote.</p>
+        <form id="link-form" class="row-form">
+          <input name="transmission" placeholder="Identifiant Transmission" autocapitalize="none" spellcheck="false" required>
+          <input name="password" type="password" placeholder="Mot de passe Transmission" autocomplete="off" required>
+          <button class="btn primary" type="submit">Relier</button>
+        </form>
+        <p class="error" id="link-error" role="alert" hidden></p>
+      </section>
+
+      <section id="tab-downloads" hidden>
+        <form id="add-form" class="row-form card">
+          <input name="magnet" placeholder="Colle un lien magnet ou l'adresse d'un .torrent" autocomplete="off" required>
+          <button class="btn primary" type="submit">Ajouter</button>
+        </form>
+        <div class="summary" id="speeds"></div>
+        <div id="torrents" class="list"></div>
+      </section>
+
+      <section id="tab-files" hidden>
+        <nav class="crumbs" id="crumbs" aria-label="Dossier"></nav>
+        <div id="files" class="list"></div>
+      </section>
+
+      <section id="tab-search" hidden>
+        <form id="search-form" class="search card">
+          <input name="q" type="search" placeholder="Film, série, album, logiciel…" autocomplete="off">
+          <select name="cat" aria-label="Catégorie"></select>
+          <select name="provider" aria-label="Source" hidden></select>
+          <button class="btn primary" type="submit">Chercher</button>
+          <button class="btn secondary" type="button" id="top">Top 100</button>
+        </form>
+        <p class="muted small" id="search-info"></p>
+        <div id="results" class="list"></div>
+      </section>
+    </main>
+  </div>
+  <div id="toast" class="toast" role="status" hidden></div>
+</body>
+</html>

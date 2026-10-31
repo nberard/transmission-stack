@@ -1,0 +1,15 @@
+{
+  "name": "transmission-stack-portal",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Portail des téléchargements : torrents, fichiers et recherche, pour chaque ami de transmission-stack",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT"
+}
