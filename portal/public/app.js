@@ -106,7 +106,7 @@ $('#logout').addEventListener('click', async () => {
 function renderLinkCard(message) {
   const card = $('#link-card');
   const needs = state.me && !state.me.transmission && state.me.canLink;
-  card.hidden = !needs || state.tab === 'search';
+  card.hidden = !needs || state.tab === 'search' || state.tab === 'shared';
   if (message) $('#link-error').textContent = message;
   $('#link-error').hidden = !message;
 }
@@ -134,14 +134,16 @@ function renderWho() {
 }
 
 // ---------- tabs ----------
+// #downloads · #files/<path> · #shared · #shared/<id>/<path> · #search
+const TABS = ['downloads', 'files', 'shared', 'search'];
 function route() {
   const [tab, ...rest] = location.hash.slice(1).split('/');
-  state.tab = ['downloads', 'files', 'search'].includes(tab) ? tab : 'downloads';
+  state.tab = TABS.includes(tab) ? tab : 'downloads';
   document.querySelectorAll('.tabs a').forEach((a) => {
     if (a.dataset.tab === state.tab) a.setAttribute('aria-current', 'page');
     else a.removeAttribute('aria-current');
   });
-  for (const t of ['downloads', 'files', 'search']) $(`#tab-${t}`).hidden = t !== state.tab;
+  for (const t of TABS) $(`#tab-${t}`).hidden = t !== state.tab;
   renderLinkCard();
   clearInterval(state.timer);
   const linked = Boolean(state.me.transmission);
@@ -153,8 +155,10 @@ function route() {
     }
   } else if (state.tab === 'files') {
     $('#tab-files').hidden = !linked;
-    state.filesPath = decodeURIComponent(rest.join('/'));
-    if (linked) loadFiles();
+    if (linked) loadFiles(null, decodeURIComponent(rest.join('/')));
+  } else if (state.tab === 'shared') {
+    if (rest[0]) loadFiles(rest[0], decodeURIComponent(rest.slice(1).join('/')));
+    else loadShares();
   }
 }
 window.addEventListener('hashchange', route);
@@ -162,7 +166,7 @@ window.addEventListener('hashchange', route);
 // ---------- torrents ----------
 const STATUS = {
   0: ['En pause', ''], 1: ['Vérification en attente', 'warn'], 2: ['Vérification', 'warn'],
-  3: ['En file d\'attente', ''], 4: ['Téléchargement', 'ok'], 5: ['En attente de partage', ''], 6: ['Partage', 'ok'],
+  3: ['En file d\'attente', ''], 4: ['Téléchargement', 'ok'], 5: ['Terminé, seed en attente', ''], 6: ['Terminé, en seed', 'ok'],
 };
 
 async function loadTorrents() {
@@ -236,51 +240,391 @@ $('#add-form').addEventListener('submit', async (e) => {
   }
 });
 
-// ---------- files ----------
+// ---------- files (mine, or inside a share) ----------
 const ICONS = { video: '🎬', audio: '🎵', image: '🖼️', text: '📄', archive: '📦', other: '📄' };
 const KIND = {
-  video: /\.(mp4|m4v|mkv|webm|avi|mov|wmv|ts)$/i, audio: /\.(mp3|flac|m4a|ogg|opus|wav|aac)$/i,
+  video: /\.(mp4|m4v|mkv|webm|avi|mov|wmv|ts|m2ts|flv|mpg|mpeg)$/i, audio: /\.(mp3|flac|m4a|ogg|opus|wav|aac|wma)$/i,
   image: /\.(jpe?g|png|gif|webp)$/i, text: /\.(txt|nfo|srt|sub|pdf|log)$/i, archive: /\.(zip|rar|7z|tar|gz|iso)$/i,
 };
 const kindOf = (name) => Object.keys(KIND).find((k) => KIND[k].test(name)) || 'other';
-// Kinds the browser can usually open (mkv/avi often cannot: download them, or use VLC)
-const playable = (name) => /\.(mp4|m4v|webm|mp3|m4a|flac|ogg|opus|wav|jpe?g|png|gif|webp|pdf|txt|nfo|srt|log)$/i.test(name);
+const viewable = (name) => /\.(jpe?g|png|gif|webp|pdf|txt|nfo|srt|log)$/i.test(name);
+const playable = (name) => ['video', 'audio'].includes(kindOf(name));
 
-async function loadFiles() {
-  const p = state.filesPath;
+// URL of a file: /files/<path> for mine, /shared/<id>/<path> inside a share
+const fileUrl = (share, rel) => (share ? `/shared/${share}/${encodePath(rel)}` : `/files/${encodePath(rel)}`);
+const dirHash = (share, rel) => (share ? `#shared/${share}${rel ? '/' + encodePath(rel) : ''}` : `#files${rel ? '/' + encodePath(rel) : ''}`);
+
+async function loadFiles(share, p) {
+  const target = share ? '#shared-list' : '#files';
+  const crumbs = share ? '#shared-crumbs' : '#crumbs';
   const parts = p ? p.split('/') : [];
-  $('#crumbs').replaceChildren(
-    h('a', { href: '#files' }, 'Downloads'),
-    ...parts.flatMap((part, i) => [' / ', h('a', { href: `#files/${encodePath(parts.slice(0, i + 1).join('/'))}` }, part)]),
+  let shareInfo = null;
+  let myShares = [];
+  try {
+    const all = (await api('GET', '/api/shares')).shares;
+    if (share) {
+      shareInfo = all.find((s) => s.id === share);
+      if (!shareInfo) throw new ApiError("Ce partage n'existe plus");
+    } else {
+      myShares = all.filter((s) => s.mine);
+    }
+  } catch (err) {
+    $(target).replaceChildren(h('p', { class: 'empty' }, err.message));
+    return;
+  }
+  $(crumbs).hidden = false;
+  $(crumbs).replaceChildren(
+    share ? h('a', { href: '#shared' }, 'Partagé') : h('a', { href: '#files' }, 'Downloads'),
+    ...(share ? [' / ', h('a', { href: dirHash(share, '') }, shareInfo.name)] : []),
+    ...parts.flatMap((part, i) => [' / ', h('a', { href: dirHash(share, parts.slice(0, i + 1).join('/')) }, part)]),
   );
   let data;
   try {
-    data = await api('GET', `/api/files?path=${encodeURIComponent(p)}`);
+    data = await api('GET', `/api/files?path=${encodeURIComponent(p)}${share ? `&share=${share}` : ''}`);
   } catch (err) {
-    if (!err.needsLink) $('#files').replaceChildren(h('p', { class: 'empty' }, err.message));
+    if (!err.needsLink) $(target).replaceChildren(h('p', { class: 'empty' }, err.message));
     return;
   }
   if (!data.entries.length) {
-    $('#files').replaceChildren(h('p', { class: 'empty' }, 'Dossier vide.'));
+    $(target).replaceChildren(h('p', { class: 'empty' }, 'Dossier vide.'));
     return;
   }
-  $('#files').replaceChildren(...data.entries.map((e) => {
+  // The real path of the folder in its owner's Downloads, to know what is already shared
+  const sharedPaths = new Map(myShares.map((s) => [s.path, s]));
+  $(target).replaceChildren(...data.entries.map((e) => {
     const rel = p ? `${p}/${e.name}` : e.name;
-    if (e.type === 'dir') {
-      return h('div', { class: 'item file-row' },
-        h('span', { class: 'icon' }, '📁'),
-        h('span', { class: 'name' }, h('a', { href: `#files/${encodePath(rel)}` }, e.name)),
-        h('span', { class: 'muted small' }, date(e.mtime)));
-    }
-    const href = `/files/${encodePath(rel)}`;
-    return h('div', { class: 'item file-row' },
-      h('span', { class: 'icon' }, ICONS[kindOf(e.name)]),
-      h('span', { class: 'name' }, h('a', { href, download: e.name }, e.name), h('div', { class: 'muted small' }, `${size(e.size)} · ${date(e.mtime)}`)),
-      h('span', { class: 'item-actions' },
-        playable(e.name) ? h('a', { class: 'btn secondary small', href: `${href}?inline=1`, target: '_blank', rel: 'noopener' }, 'Ouvrir') : null,
-        h('a', { class: 'btn primary small', href, download: e.name }, 'Télécharger')),
-    );
+    return entryRow(e, { share, rel, siblings: data.entries, shared: share ? null : sharedPaths.get(rel) || false });
   }));
+}
+
+// One file or folder line. ctx: { share, rel, siblings, shared: share object | false | null (null: inside a share) }
+function entryRow(e, ctx) {
+  const { share, rel } = ctx;
+  const actions = [];
+  let nameEl;
+  if (e.type === 'dir') {
+    nameEl = h('a', { href: dirHash(share, rel) }, e.name);
+  } else {
+    const href = fileUrl(share, rel);
+    nameEl = h('a', { href, download: e.name }, e.name);
+    if (playable(e.name)) {
+      actions.push(h('button', { class: 'btn primary small', type: 'button', onclick: () => openPlayer({ share, rel, name: e.name, siblings: ctx.siblings }) }, '▶ Lire'));
+      actions.push(h('button', { class: 'btn secondary small', type: 'button', title: 'Lien pour VLC, une TV ou une appli', onclick: () => playerLink(share, rel) }, 'VLC'));
+    } else if (viewable(e.name)) {
+      actions.push(h('a', { class: 'btn secondary small', href: `${href}?inline=1`, target: '_blank', rel: 'noopener' }, 'Ouvrir'));
+    }
+    actions.push(h('a', { class: 'btn secondary small', href, download: e.name, title: 'Télécharger' }, '↓'));
+  }
+  if (ctx.shared !== null && ctx.shared !== undefined) actions.push(shareButton(rel, ctx.shared));
+  const meta = [e.size != null ? size(e.size) : null, date(e.mtime)].filter(Boolean).join(' · ');
+  return h('div', { class: 'item file-row' },
+    h('span', { class: 'icon' }, e.type === 'dir' ? '📁' : ICONS[kindOf(e.name)]),
+    h('span', { class: 'name' }, nameEl, h('div', { class: 'muted small' }, meta)),
+    h('span', { class: 'item-actions' }, actions),
+  );
+}
+
+function shareButton(rel, shared) {
+  const btn = h('button', {
+    class: `btn small ${shared ? 'shared-on' : 'secondary'}`, type: 'button',
+    title: shared ? 'Visible par tous les potes · cliquer pour arrêter' : 'Rendre visible par tous les potes',
+    onclick: async () => {
+      btn.disabled = true;
+      try {
+        if (shared) {
+          await api('DELETE', `/api/shares/${shared.id}`);
+          toast('Ne plus partagé');
+        } else {
+          await api('POST', '/api/shares', { path: rel });
+          toast('Partagé avec les potes (onglet Partagé)');
+        }
+        route();
+      } catch (err) {
+        toast(err.message);
+        btn.disabled = false;
+      }
+    },
+  }, shared ? '✓ Partagé' : 'Partager');
+  return btn;
+}
+
+// ---------- « Partagé »: what every pote shared ----------
+async function loadShares() {
+  $('#shared-crumbs').hidden = true;
+  let list;
+  try {
+    list = (await api('GET', '/api/shares')).shares;
+  } catch (err) {
+    $('#shared-list').replaceChildren(h('p', { class: 'empty' }, err.message));
+    return;
+  }
+  if (!list.length) {
+    $('#shared-list').replaceChildren(h('p', { class: 'empty' }, 'Rien de partagé pour l\'instant. Dans « Mes fichiers », le bouton « Partager » rend un fichier ou un dossier visible par tous les potes.'));
+    return;
+  }
+  $('#shared-list').replaceChildren(...list.map((s) => {
+    // A share is the root of its own tree: /shared/<id>/ for a file, #shared/<id> for a folder
+    const row = entryRow(s, { share: s.id, rel: '', siblings: [] });
+    const meta = row.querySelector('.name .muted');
+    meta.textContent = `par ${s.by} · ${[s.size != null ? size(s.size) : null, date(s.sharedAt)].filter(Boolean).join(' · ')}`;
+    if (s.mine) {
+      row.querySelector('.item-actions').append(h('button', {
+        class: 'btn danger small', type: 'button',
+        onclick: async () => {
+          try {
+            await api('DELETE', `/api/shares/${s.id}`);
+            toast('Ne plus partagé');
+            loadShares();
+          } catch (err) {
+            toast(err.message);
+          }
+        },
+      }, 'Arrêter'));
+    }
+    return row;
+  }));
+}
+
+// ---------- link for VLC / TV / phone apps ----------
+async function playerLink(share, rel) {
+  try {
+    const r = await api('POST', '/api/player-link', { path: rel, share });
+    const input = h('input', { value: r.url, readonly: true, 'aria-label': 'Lien', onfocus: (e) => e.target.select() });
+    const hours = Math.round((new Date(r.expires) - Date.now()) / 3600e3);
+    const dlg = modal(
+      h('h2', {}, 'Lire ailleurs'),
+      h('p', { class: 'muted' }, `Colle ce lien dans VLC (Média › Ouvrir un flux réseau), une appli de TV ou un autre lecteur : tous les formats et toutes les pistes y passent. Il marche ${hours} h, pour n'importe qui qui l'a : ne le partage pas.`),
+      input,
+      h('div', { class: 'row-form' },
+        h('button', { class: 'btn primary', type: 'button', onclick: async () => {
+          try { await navigator.clipboard.writeText(r.url); toast('Lien copié'); } catch { input.select(); }
+        } }, 'Copier'),
+        h('a', { class: 'btn secondary', href: `vlc://${r.url}` }, 'Ouvrir dans VLC'),
+        h('button', { class: 'btn link', type: 'button', onclick: () => dlg.close() }, 'Fermer')),
+    );
+    input.select();
+  } catch (err) {
+    toast(err.message);
+  }
+}
+
+function modal(...children) {
+  const box = h('div', { class: 'modal card', role: 'dialog', 'aria-modal': 'true' }, children);
+  const back = h('div', { class: 'backdrop', onclick: (e) => e.target === back && close() }, box);
+  const onKey = (e) => e.key === 'Escape' && close();
+  function close() {
+    back.remove();
+    document.removeEventListener('keydown', onKey);
+  }
+  document.addEventListener('keydown', onKey);
+  document.body.append(back);
+  return { close, el: box };
+}
+
+// ---------- player ----------
+// "direct": the browser reads the file itself (mp4/webm with compatible codecs), seeking is native.
+// "stream": the server converts on the fly (/stream); seeking restarts the conversion at that time, so the
+// player keeps the offset itself. It falls back to "stream" whenever the browser fails to read the file.
+const fmtTime = (s) => {
+  s = Math.max(0, Math.floor(s || 0));
+  const hh = Math.floor(s / 3600), mm = Math.floor((s % 3600) / 60), ss = s % 60;
+  return (hh ? `${hh}:${String(mm).padStart(2, '0')}` : `${mm}`) + `:${String(ss).padStart(2, '0')}`;
+};
+
+// SRT or WebVTT → [{ start, end, text }]
+function parseCues(text) {
+  const ts = (t) => {
+    const m = /(?:(\d+):)?(\d{1,2}):(\d{2})[,.](\d{1,3})/.exec(t);
+    return m ? (+(m[1] || 0)) * 3600 + +m[2] * 60 + +m[3] + +m[4].padEnd(3, '0') / 1000 : null;
+  };
+  const cues = [];
+  for (const block of text.replace(/\r/g, '').split(/\n{2,}/)) {
+    const lines = block.split('\n');
+    const i = lines.findIndex((l) => l.includes('-->'));
+    if (i < 0) continue;
+    const [a, b] = lines[i].split('-->');
+    const start = ts(a), end = ts(b);
+    const body = lines.slice(i + 1).join('\n').replace(/\{\\[^}]*\}/g, '').replace(/<(?!\/?[ibu]>)[^>]+>/g, '').trim();
+    if (start != null && end != null && body) cues.push({ start, end, text: body });
+  }
+  return cues;
+}
+
+async function fetchText(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `Erreur ${res.status}`);
+  const buf = await res.arrayBuffer();
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(buf);
+  } catch {
+    return new TextDecoder('windows-1252').decode(buf); // old French .srt files
+  }
+}
+
+async function openPlayer({ share, rel, name, siblings = [] }) {
+  const q = new URLSearchParams({ path: rel });
+  if (share) q.set('share', share);
+  let info;
+  try {
+    info = await api('GET', `/api/media?${q}`);
+  } catch (err) {
+    toast(err.message);
+    return;
+  }
+
+  const video = h('video', { playsinline: true, preload: 'auto' });
+  const msg = h('div', { class: 'player-msg' });
+  const seek = h('input', { type: 'range', min: 0, max: Math.max(1, Math.floor(info.duration || 0)), step: 1, value: 0, 'aria-label': 'Position' });
+  const time = h('span', { class: 'player-time' }, `0:00 / ${fmtTime(info.duration)}`);
+  const playBtn = h('button', { class: 'pbtn', type: 'button', 'aria-label': 'Lecture' }, '▶');
+  const fullBtn = h('button', { class: 'pbtn', type: 'button', 'aria-label': 'Plein écran' }, '⛶');
+  const closeBtn = h('button', { class: 'pbtn', type: 'button', 'aria-label': 'Fermer' }, '✕');
+
+  // Audio tracks (VF / VO…): picking one that is not the default needs the converted stream
+  const audioSel = h('select', { 'aria-label': 'Piste audio', hidden: info.audio.length < 2 },
+    info.audio.map((a) => h('option', { value: a.index, selected: a.index === info.defaultAudio }, `🔊 ${a.label}`)));
+
+  // Subtitles: .srt/.vtt next to the video (same name first), then the ones inside the file
+  const base = name.replace(/\.[^.]+$/, '').toLowerCase();
+  const dir = rel.includes('/') ? rel.slice(0, rel.lastIndexOf('/') + 1) : '';
+  const external = siblings.filter((e) => e.type === 'file' && /\.(srt|vtt)$/i.test(e.name))
+    .sort((a, b) => b.name.toLowerCase().startsWith(base) - a.name.toLowerCase().startsWith(base));
+  const subOptions = [
+    ...external.map((e) => ({ label: e.name.toLowerCase().startsWith(base) ? e.name.slice(base.length).replace(/^[._ -]+/, '') || e.name : e.name, url: fileUrl(share, dir + e.name) })),
+    ...info.subtitles.map((s) => ({ label: s.label, url: `/api/subtitle?${q}&track=${s.index}` })),
+  ];
+  const subSel = h('select', { 'aria-label': 'Sous-titres', hidden: !subOptions.length },
+    h('option', { value: '' }, '💬 Sans sous-titres'),
+    subOptions.map((o, i) => h('option', { value: i }, `💬 ${o.label}`)));
+
+  const stage = h('div', { class: 'player-stage' }, video, msg);
+  const box = h('div', { class: 'player', role: 'dialog', 'aria-modal': 'true', 'aria-label': name },
+    h('div', { class: 'player-top' }, h('span', { class: 'player-title' }, name), closeBtn),
+    stage,
+    h('div', { class: 'player-bar' }, playBtn, time, seek, audioSel, subSel, fullBtn),
+  );
+  const back = h('div', { class: 'backdrop player-backdrop' }, box);
+  document.body.append(back);
+
+  const st = { mode: info.direct ? 'direct' : 'stream', offset: 0, audio: info.defaultAudio, cues: [], dragging: false };
+  const now = () => (st.mode === 'direct' ? video.currentTime : st.offset + video.currentTime);
+  const say = (text) => { msg.textContent = text || ''; msg.hidden = !text; };
+
+  // A fresh track each time: Chromium keeps showing a removed cue that was on screen
+  let track = null;
+  function applyCues() {
+    if (track) track.mode = 'disabled';
+    track = null;
+    if (!st.cues.length) return;
+    track = video.addTextTrack('subtitles', 'Sous-titres', 'fr');
+    const shift = st.mode === 'direct' ? 0 : st.offset;
+    for (const c of st.cues) if (c.end > shift) track.addCue(new VTTCue(Math.max(0, c.start - shift), c.end - shift, c.text));
+    track.mode = 'showing';
+  }
+
+  function load(t, autoplay = true) {
+    if (st.mode === 'direct') {
+      video.src = `${fileUrl(share, rel)}?inline=1`;
+      if (t > 0) video.addEventListener('loadedmetadata', () => (video.currentTime = t), { once: true });
+    } else {
+      st.offset = Math.max(0, Math.floor(t));
+      video.src = `/stream?${q}&t=${st.offset}&audio=${st.audio}`;
+      say('Conversion en cours…');
+    }
+    applyCues();
+    if (autoplay) video.play().catch(() => {});
+  }
+
+  function seekTo(t) {
+    t = Math.min(Math.max(0, t), info.duration || t);
+    if (st.mode === 'direct') video.currentTime = t;
+    else load(t);
+  }
+
+  video.addEventListener('timeupdate', () => {
+    if (!st.dragging) seek.value = Math.floor(now());
+    time.textContent = `${fmtTime(now())} / ${fmtTime(info.duration)}`;
+  });
+  video.addEventListener('play', () => (playBtn.textContent = '❚❚'));
+  video.addEventListener('pause', () => (playBtn.textContent = '▶'));
+  video.addEventListener('waiting', () => say('Chargement…'));
+  video.addEventListener('playing', () => say(''));
+  video.addEventListener('error', () => {
+    if (st.mode === 'direct') {
+      // The browser cannot read this file: let the server convert it
+      const t = video.currentTime || 0;
+      st.mode = 'stream';
+      load(t);
+    } else if (video.getAttribute('src')) {
+      say('Lecture impossible ici. Essaie « VLC » ou télécharge le fichier.');
+    }
+  });
+
+  seek.addEventListener('input', () => {
+    st.dragging = true;
+    time.textContent = `${fmtTime(+seek.value)} / ${fmtTime(info.duration)}`;
+  });
+  seek.addEventListener('change', () => {
+    st.dragging = false;
+    seekTo(+seek.value);
+  });
+  playBtn.addEventListener('click', () => (video.paused ? video.play() : video.pause()));
+  video.addEventListener('click', () => (video.paused ? video.play() : video.pause()));
+  audioSel.addEventListener('change', () => {
+    st.audio = +audioSel.value;
+    const t = now();
+    st.mode = 'stream';
+    load(t);
+  });
+  subSel.addEventListener('change', async () => {
+    st.cues = [];
+    applyCues();
+    if (subSel.value === '') return;
+    say('Chargement des sous-titres…');
+    try {
+      st.cues = parseCues(await fetchText(subOptions[+subSel.value].url));
+      applyCues();
+      say('');
+      if (!st.cues.length) toast('Aucun sous-titre lisible dans ce fichier');
+    } catch (err) {
+      say('');
+      toast(err.message);
+    }
+  });
+  fullBtn.addEventListener('click', () => {
+    if (document.fullscreenElement) document.exitFullscreen();
+    else if (box.requestFullscreen) box.requestFullscreen().catch(() => video.webkitEnterFullscreen?.());
+    else video.webkitEnterFullscreen?.();
+  });
+
+  function onKey(e) {
+    if (e.target.tagName === 'SELECT' || e.target.tagName === 'INPUT' && e.target !== seek) return;
+    if (e.key === ' ' || e.key === 'k') { e.preventDefault(); video.paused ? video.play() : video.pause(); }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); seekTo(now() + 10); }
+    else if (e.key === 'ArrowLeft') { e.preventDefault(); seekTo(now() - 10); }
+    else if (e.key === 'f') fullBtn.click();
+    else if (e.key === 'Escape' && !document.fullscreenElement) close();
+  }
+  function close() {
+    document.removeEventListener('keydown', onKey);
+    video.pause();
+    video.removeAttribute('src');
+    video.load(); // closes the connection: the server stops the conversion
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    back.remove();
+  }
+  closeBtn.addEventListener('click', close);
+  document.addEventListener('keydown', onKey);
+
+  // Subtitles on by default when a .srt carries the video's name
+  say('');
+  load(0);
+  const firstExternal = external.findIndex((e) => e.name.toLowerCase().startsWith(base));
+  if (firstExternal >= 0) {
+    subSel.value = String(firstExternal);
+    subSel.dispatchEvent(new Event('change'));
+  }
+  box.focus();
 }
 
 // ---------- search ----------

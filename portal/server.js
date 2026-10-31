@@ -1,7 +1,8 @@
 // Portail des téléchargements de transmission-stack.
 // Friends sign in with their clear-soken account (role "pote", see clear-soken README « Comptes des potes »).
 // The portal then shows their torrents, their Downloads folder (read-only) and a torrent search whose
-// results are added to their Transmission in one click.
+// results are added to their Transmission in one click. Videos play in the browser (converted on the fly by
+// ffmpeg when needed), and a pote can share files or folders with every pote (« Partagé »).
 // Without COMPTES_JETON (local tests), it falls back to signing in with the Transmission username/password.
 import http from 'node:http';
 import fs from 'node:fs';
@@ -14,6 +15,8 @@ import { listDir, resolveInside, contentType, parseRange, FileError } from './li
 import { providers, getProvider, cached } from './lib/providers/index.js';
 import { clearSokenAccounts, AccountError } from './lib/accounts.js';
 import { LinkStore } from './lib/links.js';
+import { ShareStore } from './lib/shares.js';
+import { probe, streamArgs, spawnStream, subtitleVtt, MediaError } from './lib/media.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const config = {
@@ -33,6 +36,13 @@ const config = {
 };
 const verifyAccount = config.accountsToken ? clearSokenAccounts({ url: config.clearSokenUrl, token: config.accountsToken }) : null;
 const links = new LinkStore(path.join(config.dataDir, 'liens.json'));
+const shares = new ShareStore(path.join(config.dataDir, 'partages.json'));
+// Conversions running at once (each one is an ffmpeg process): one per pote, MAX_STREAMS for the server
+const MAX_STREAMS = Number(process.env.MAX_STREAMS || 3);
+const streams = new Set();
+// Links for VLC & co. (no cookie there): token -> { file, name, expires }
+const playerLinks = new Map();
+const PLAYER_LINK_HOURS = Number(process.env.PLAYER_LINK_HOURS || 24);
 
 const USERNAME_RE = /^[a-z_][a-z0-9_-]{0,31}$/;
 const COOKIE = 'portal_session';
@@ -181,6 +191,44 @@ function needTransmission(session) {
   return session.client;
 }
 
+// Where a request's file lives: the pote's own Downloads, or a share (?share=<id>), seen by every pote
+async function sourceBase(session, shareId) {
+  if (!shareId) {
+    needTransmission(session);
+    return downloadsDir(session.tUser);
+  }
+  const share = await shares.get(String(shareId));
+  if (!share) throw new HttpError(404, "Ce partage n'existe plus");
+  return resolveInside(downloadsDir(share.owner), share.path);
+}
+
+async function sourceFile(session, url) {
+  const base = await sourceBase(session, url.searchParams.get('share'));
+  const file = await resolveInside(base, url.searchParams.get('path') || '');
+  if (!(await fsp.stat(file)).isFile()) throw new HttpError(400, "Ce n'est pas un fichier");
+  return file;
+}
+
+async function shareView(share, session) {
+  try {
+    const target = await resolveInside(downloadsDir(share.owner), share.path);
+    const st = await fsp.stat(target);
+    return {
+      id: share.id,
+      name: path.basename(share.path),
+      path: share.path,
+      type: st.isDirectory() ? 'dir' : 'file',
+      size: st.isDirectory() ? null : st.size,
+      mtime: st.mtime.toISOString(),
+      sharedAt: share.sharedAt,
+      by: share.by,
+      mine: share.by === session.user || share.owner === session.tUser,
+    };
+  } catch {
+    return null; // deleted by its owner since
+  }
+}
+
 // Torrent as shown by the portal; `path` is its location in the Files tab, when inside Downloads
 function torrentView(t, user) {
   const root = `/home/${user}/Downloads`;
@@ -293,8 +341,74 @@ async function api(req, res, url, session) {
 
   if (route === 'GET /api/files') {
     const rel = url.searchParams.get('path') || '';
+    return send(res, 200, { path: rel, entries: await listDir(await sourceBase(session, url.searchParams.get('share')), rel) });
+  }
+
+  // ----- shares -----
+  if (route === 'GET /api/shares') {
+    const list = await Promise.all((await shares.all()).map((s) => shareView(s, session)));
+    return send(res, 200, { shares: list.filter(Boolean).sort((a, b) => b.sharedAt.localeCompare(a.sharedAt)) });
+  }
+
+  if (route === 'POST /api/shares') {
     needTransmission(session);
-    return send(res, 200, { path: rel, entries: await listDir(downloadsDir(tUser), rel) });
+    const rel = String((await readJson(req)).path || '').replace(/^\/+|\/+$/g, '');
+    if (!rel) throw new HttpError(400, 'Choisis un fichier ou un dossier');
+    const real = await resolveInside(downloadsDir(tUser), rel);
+    // Store the path as it really is inside Downloads (no "..", no symlink detour)
+    const clean = path.relative(await fsp.realpath(downloadsDir(tUser)), real);
+    const share = await shares.add({ owner: tUser, by: user, path: clean });
+    return send(res, 200, await shareView(share, session));
+  }
+
+  const shareRoute = /^\/api\/shares\/([0-9a-f]{12})$/.exec(url.pathname);
+  if (shareRoute && req.method === 'DELETE') {
+    const share = await shares.get(shareRoute[1]);
+    if (!share) throw new HttpError(404, "Ce partage n'existe plus");
+    if (share.by !== user && share.owner !== tUser) throw new HttpError(403, "Seul celui qui l'a partagé peut l'arrêter");
+    await shares.remove(share.id);
+    return send(res, 200, { ok: true });
+  }
+
+  // ----- playback -----
+  if (route === 'GET /api/media') {
+    try {
+      return send(res, 200, await probe(await sourceFile(session, url)));
+    } catch (err) {
+      if (err instanceof MediaError) throw new HttpError(err.status === 422 ? 422 : 500, 'Fichier illisible : ' + err.message);
+      throw err;
+    }
+  }
+
+  if (route === 'GET /api/subtitle') {
+    const file = await sourceFile(session, url);
+    let vtt;
+    try {
+      vtt = await subtitleVtt(file, Math.max(0, Number(url.searchParams.get('track')) || 0));
+    } catch (err) {
+      if (err instanceof MediaError) throw new HttpError(422, 'Sous-titres illisibles : ' + err.message);
+      throw err;
+    }
+    res.writeHead(200, { 'Content-Type': 'text/vtt; charset=utf-8', 'Cache-Control': 'private, max-age=3600' });
+    return res.end(vtt);
+  }
+
+  // Link usable without the portal's cookie (VLC, TV, phone app), valid PLAYER_LINK_HOURS
+  if (route === 'POST /api/player-link') {
+    const { path: rel = '', share = null } = await readJson(req);
+    const fake = new URL('http://portal/');
+    fake.searchParams.set('path', String(rel));
+    if (share) fake.searchParams.set('share', String(share));
+    const file = await sourceFile(session, fake);
+    const token = crypto.randomBytes(24).toString('base64url');
+    const expires = Date.now() + PLAYER_LINK_HOURS * 3600e3;
+    playerLinks.set(token, { file, expires });
+    const proto = req.headers['x-forwarded-proto'] || (config.secureCookie ? 'https' : 'http');
+    const host = req.headers['x-forwarded-host'] || req.headers.host;
+    return send(res, 200, {
+      url: `${proto}://${host}/v/${token}/${encodeURIComponent(path.basename(file))}`,
+      expires: new Date(expires).toISOString(),
+    });
   }
 
   if (route === 'GET /api/search' || route === 'GET /api/top') {
@@ -320,21 +434,32 @@ async function api(req, res, url, session) {
   throw new HttpError(404, 'Introuvable');
 }
 
-// ---------- file downloads: /files/<path in Downloads> ----------
-async function serveFile(req, res, url, session) {
-  if (!session) throw new HttpError(401, 'Connexion requise');
-  needTransmission(session);
-  let rel;
+// ---------- files: /files/<path in Downloads>, /shared/<id>/<path in the share>, /v/<token>/<name> ----------
+function decodePath(p) {
   try {
-    rel = decodeURIComponent(url.pathname.slice('/files/'.length));
+    return decodeURIComponent(p);
   } catch {
     throw new HttpError(400, 'Chemin invalide');
   }
-  const file = await resolveInside(downloadsDir(session.tUser), rel);
+}
+
+async function serveFile(req, res, url, session) {
+  let file;
+  const shared = /^\/shared\/([0-9a-f]{12})(?:\/(.*))?$/.exec(url.pathname);
+  const player = /^\/v\/([A-Za-z0-9_-]{32})\/[^/]*$/.exec(url.pathname);
+  if (player) {
+    const link = playerLinks.get(player[1]);
+    if (!link || link.expires < Date.now()) throw new HttpError(404, 'Lien expiré');
+    file = link.file;
+  } else {
+    if (!session) throw new HttpError(401, 'Connexion requise');
+    if (shared) file = await resolveInside(await sourceBase(session, shared[1]), decodePath(shared[2] || ''));
+    else file = await resolveInside(await sourceBase(session, null), decodePath(url.pathname.slice('/files/'.length)));
+  }
   const stat = await fsp.stat(file);
   if (!stat.isFile()) throw new HttpError(400, "Ce n'est pas un fichier");
 
-  const inline = url.searchParams.get('inline') === '1';
+  const inline = url.searchParams.get('inline') === '1' || Boolean(player);
   const type = inline ? contentType(file) : 'application/octet-stream';
   const name = path.basename(file);
   const headers = {
@@ -361,6 +486,45 @@ async function serveFile(req, res, url, session) {
   res.on('close', () => stream.destroy());
   stream.pipe(res);
 }
+
+// ---------- on-the-fly conversion: /stream?path=…[&share=…]&t=<seconds>&audio=<track> ----------
+async function serveStream(req, res, url, session) {
+  if (!session) throw new HttpError(401, 'Connexion requise');
+  const file = await sourceFile(session, url);
+  const info = await probe(file).catch((err) => {
+    throw new HttpError(422, 'Fichier illisible : ' + err.message);
+  });
+  // Seeking starts a new conversion: stop this pote's previous one first
+  if (session.stream) session.stream.kill('SIGKILL');
+  if (streams.size >= MAX_STREAMS) throw new HttpError(503, 'Trop de vidéos en lecture sur le serveur, réessaie dans un moment');
+  const args = streamArgs(file, info, {
+    start: Math.max(0, Number(url.searchParams.get('t')) || 0),
+    audio: url.searchParams.has('audio') ? Number(url.searchParams.get('audio')) : info.defaultAudio,
+  });
+  const child = spawnStream(args);
+  streams.add(child);
+  session.stream = child;
+  let errText = '';
+  child.stderr.on('data', (c) => (errText = (errText + c).slice(-1000)));
+  child.on('close', (code, signal) => {
+    streams.delete(child);
+    if (session.stream === child) session.stream = null;
+    if (code && !signal) console.error(`ffmpeg ${code}: ${errText.trim()}`);
+  });
+  child.on('error', (err) => {
+    streams.delete(child);
+    if (!res.headersSent) send(res, 500, { error: `ffmpeg : ${err.message}` });
+    else res.destroy();
+  });
+  res.writeHead(200, { 'Content-Type': 'video/mp4', 'Cache-Control': 'no-store', 'X-Accel-Buffering': 'no' });
+  child.stdout.pipe(res);
+  res.on('close', () => child.kill('SIGKILL'));
+}
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [t, l] of playerLinks) if (l.expires < now) playerLinks.delete(t);
+}, 3600e3).unref();
 
 // ---------- static front-end ----------
 const STATIC = {
@@ -397,9 +561,9 @@ const server = http.createServer(async (req, res) => {
       if (req.method !== 'GET' && req.headers['x-portal'] !== '1') throw new HttpError(403, 'Requête refusée');
       return await api(req, res, url, session);
     }
-    if (url.pathname.startsWith('/files/') && (req.method === 'GET' || req.method === 'HEAD')) {
-      return await serveFile(req, res, url, session);
-    }
+    const isRead = req.method === 'GET' || req.method === 'HEAD';
+    if (isRead && /^\/(files|shared|v)\//.test(url.pathname)) return await serveFile(req, res, url, session);
+    if (req.method === 'GET' && url.pathname === '/stream') return await serveStream(req, res, url, session);
     if (req.method === 'GET') return await serveStatic(res, url.pathname);
     throw new HttpError(405, 'Méthode non autorisée');
   } catch (err) {
