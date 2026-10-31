@@ -386,6 +386,27 @@ async function loadShares() {
 }
 
 // ---------- link for VLC / TV / phone apps ----------
+// Desktop browsers know no "vlc://" protocol: Android opens the VLC app with an intent, iOS with VLC's
+// x-callback URL, and on a computer a one-line .m3u playlist opens VLC (it is VLC's file type by default).
+function openInVlcButton(url, name) {
+  const ua = navigator.userAgent;
+  if (/Android/i.test(ua)) {
+    const u = new URL(url);
+    const href = `intent://${u.host}${u.pathname}#Intent;scheme=${u.protocol.replace(':', '')};type=video/*;package=org.videolan.vlc;`
+      + `S.browser_fallback_url=${encodeURIComponent('https://play.google.com/store/apps/details?id=org.videolan.vlc')};end`;
+    return h('a', { class: 'btn secondary', href }, 'Ouvrir dans VLC');
+  }
+  if (/iPhone|iPad|iPod/i.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)) {
+    return h('a', { class: 'btn secondary', href: `vlc-x-callback://x-callback-url/stream?url=${encodeURIComponent(url)}` }, 'Ouvrir dans VLC');
+  }
+  const title = name.replace(/[\r\n]/g, ' ');
+  const blob = new Blob([`#EXTM3U\n#EXTINF:-1,${title}\n${url}\n`], { type: 'audio/x-mpegurl' });
+  return h('a', {
+    class: 'btn secondary', href: URL.createObjectURL(blob), download: `${title.replace(/\.[^.]+$/, '')}.m3u`,
+    title: 'Petit fichier playlist : double-clic pour lire dans VLC',
+  }, 'Fichier pour VLC (.m3u)');
+}
+
 async function playerLink(share, rel) {
   try {
     const r = await api('POST', '/api/player-link', { path: rel, share });
@@ -399,7 +420,7 @@ async function playerLink(share, rel) {
         h('button', { class: 'btn primary', type: 'button', onclick: async () => {
           try { await navigator.clipboard.writeText(r.url); toast('Lien copié'); } catch { input.select(); }
         } }, 'Copier'),
-        h('a', { class: 'btn secondary', href: `vlc://${r.url}` }, 'Ouvrir dans VLC'),
+        openInVlcButton(r.url, decodeURIComponent(r.url.split('/').pop())),
         h('button', { class: 'btn link', type: 'button', onclick: () => dlg.close() }, 'Fermer')),
     );
     input.select();
