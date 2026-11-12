@@ -164,12 +164,14 @@ async function signInPote(user, password) {
   const linkKey = await links.keyFor(account.nom, password);
   const saved = LinkStore.open(linkKey.link, linkKey.key);
   const candidates = [];
-  if (saved && transmissionExists(saved.transmission)) candidates.push(saved);
+  if (saved && transmissionExists(saved.transmission)) candidates.push({ ...saved, manual: true });
   // Same name and password on both sides: linked without storing anything
   if (transmissionExists(account.nom)) candidates.push({ transmission: account.nom, password });
   for (const c of candidates) {
     const client = clientFor(c.transmission, c.password);
-    if (await works(client).catch(() => false)) return { user: account.nom, tUser: c.transmission, client, linkKey };
+    if (await works(client).catch(() => false)) {
+      return { user: account.nom, tUser: c.transmission, client, linkKey, manualLink: Boolean(c.manual) };
+    }
   }
   return { user: account.nom, tUser: null, client: null, linkKey };
 }
@@ -277,6 +279,7 @@ async function api(req, res, url, session) {
       user,
       transmission: tUser,
       canLink: Boolean(session.linkKey),
+      manualLink: Boolean(session.manualLink),
       providers: providers.map(({ id, name, categories }) => ({ id, name, categories })),
     });
   }
@@ -290,14 +293,14 @@ async function api(req, res, url, session) {
     const client = clientFor(name, String(password));
     if (!(await works(client))) throw new HttpError(401, 'Compte Transmission ou mot de passe incorrect');
     await links.save(user, { transmission: name, password: String(password) }, session.linkKey);
-    Object.assign(session, { tUser: name, client });
+    Object.assign(session, { tUser: name, client, manualLink: true });
     return send(res, 200, { transmission: name });
   }
 
   if (route === 'DELETE /api/link') {
     if (!session.linkKey) throw new HttpError(400, 'Rien à délier');
     await links.remove(user);
-    Object.assign(session, { tUser: null, client: null });
+    Object.assign(session, { tUser: null, client: null, manualLink: false });
     return send(res, 200, { ok: true });
   }
 
