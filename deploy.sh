@@ -201,8 +201,10 @@ fi
 echo " --> deploying new transmission daemon"
 if [ -n "$DOMAIN" ]; then
     HOST="$USERNAME.$DOMAIN"
-    # Transmission refuses requests whose Host header it does not know (DNS rebinding protection)
-    jq --arg HOST "$HOST" '."rpc-host-whitelist" = $HOST | ."rpc-host-whitelist-enabled" = true' \
+    # Transmission refuses requests whose Host header it does not know (DNS rebinding protection).
+    # No IP whitelist: Caddy and the downloads portal reach it from other containers (otherwise HTTP 403);
+    # with -H no port is published, and the password stays required.
+    jq --arg HOST "$HOST" '."rpc-host-whitelist" = $HOST | ."rpc-host-whitelist-enabled" = true | ."rpc-whitelist-enabled" = false' \
         "$SETTINGS_PATH" > settings.temp.json && mv settings.temp.json "$SETTINGS_PATH"
     chown "$USERNAME:$GID" "$SETTINGS_PATH"
     docker run -d --name "$CONTAINER_NAME" --restart unless-stopped \

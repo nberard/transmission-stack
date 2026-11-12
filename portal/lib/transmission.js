@@ -28,6 +28,10 @@ export class TransmissionClient {
         continue;
       }
       if (res.status === 401) throw new RpcError('Identifiant ou mot de passe incorrect', 401);
+      // rpc-whitelist (IP list) still on in this Transmission's settings: it refuses the portal's container
+      if (res.status === 403) {
+        throw new RpcError("Ce Transmission refuse le portail (liste blanche d'adresses IP) : l'admin doit relancer deploy.sh -u <nom> -H <domaine>");
+      }
       if (res.status !== 200) throw new RpcError(`Transmission a répondu HTTP ${res.status}`);
       let parsed;
       try {
