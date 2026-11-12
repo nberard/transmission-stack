@@ -289,9 +289,13 @@ async function api(req, res, url, session) {
     if (!session.linkKey) throw new HttpError(400, 'Rien à relier : tu es connecté avec ton compte Transmission');
     const { transmission = '', password = '' } = await readJson(req);
     const name = String(transmission).trim().toLowerCase();
-    if (!transmissionExists(name) || !password) throw new HttpError(401, 'Compte Transmission ou mot de passe incorrect');
+    // 422, not 401: for the page, 401 means "session expired" and sends back to the sign-in screen
+    if (!transmissionExists(name)) {
+      throw new HttpError(422, `Aucun Transmission « ${name || '…'} » sur le serveur : c'est le nom de ton Transmission (celui de son adresse <nom>.${config.domain || 'domaine'}), pas forcément celui de ton compte de pote`);
+    }
+    if (!password) throw new HttpError(422, 'Donne le mot de passe de ce Transmission');
     const client = clientFor(name, String(password));
-    if (!(await works(client))) throw new HttpError(401, 'Compte Transmission ou mot de passe incorrect');
+    if (!(await works(client))) throw new HttpError(422, `Mot de passe incorrect pour le Transmission « ${name} »`);
     await links.save(user, { transmission: name, password: String(password) }, session.linkKey);
     Object.assign(session, { tUser: name, client, manualLink: true });
     return send(res, 200, { transmission: name });
