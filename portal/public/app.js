@@ -118,6 +118,7 @@ $('#link-form').addEventListener('submit', async (e) => {
     const r = await api('POST', '/api/link', { transmission: f.transmission.value, password: f.password.value });
     f.password.value = '';
     state.me.transmission = r.transmission;
+    state.me.manualLink = true;
     renderLinkCard();
     renderWho();
     toast(`Relié au Transmission « ${r.transmission} »`);
@@ -129,8 +130,28 @@ $('#link-form').addEventListener('submit', async (e) => {
 });
 
 function renderWho() {
-  const { user, transmission } = state.me;
-  $('#who').textContent = transmission && transmission !== user ? `${user} (Transmission : ${transmission})` : user;
+  const { user, transmission, manualLink } = state.me;
+  const who = $('#who');
+  who.replaceChildren(transmission && transmission !== user ? `${user} (Transmission : ${transmission})` : user);
+  // Linked by hand (pote account ≠ Transmission account): let the pote pick another Transmission
+  if (manualLink && transmission) {
+    who.append(' ', h('button', {
+      class: 'btn link small', type: 'button', title: 'Relier ce compte à un autre Transmission',
+      onclick: async () => {
+        if (!confirm(`Délier le Transmission « ${transmission} » de ton compte ? Tu pourras en relier un autre.`)) return;
+        try {
+          await api('DELETE', '/api/link');
+          state.me.transmission = null;
+          state.me.manualLink = false;
+          renderWho();
+          location.hash = '#downloads';
+          route();
+        } catch (err) {
+          toast(err.message);
+        }
+      },
+    }, 'changer'));
+  }
 }
 
 // ---------- tabs ----------
