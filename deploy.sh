@@ -111,7 +111,16 @@ if [ $USER_MISSING -eq 1 ]; then
 else
     NEXT_UID=$(id -u "$USERNAME")
 fi
-USER_UID=$(grep "$USERNAME" /etc/passwd | cut -d : -f 3)
+# The folder can be missing even when the account exists (account created before, failed run):
+# create it, private to the user, instead of letting Docker create an empty one owned by root
+if [ ! -d "$USER_LOCAL_DIR" ]; then
+    echo " -> creating $USER_LOCAL_DIR"
+    mkdir -p "$USER_LOCAL_DIR" && chmod 700 "$USER_LOCAL_DIR" && chown "$USERNAME:$GID" "$USER_LOCAL_DIR"
+fi
+if [ ! -d "$USER_LOCAL_DIR/Downloads" ]; then
+    mkdir -p "$USER_LOCAL_DIR/Downloads" && chown "$USERNAME:$GID" "$USER_LOCAL_DIR/Downloads"
+fi
+USER_UID=$(id -u "$USERNAME")
 PORT=9091
 while [ -z "$DOMAIN" ]; do
     netstat -tanpl | grep ":$PORT" > /dev/null
@@ -125,16 +134,25 @@ done
 
 IMAGE_NAME="transmission_stack_transmission:$USERNAME"
 SETTINGS_PATH="$USER_LOCAL_DIR/settings.json"
-if [ ! -f $SETTINGS_PATH ]; then
-    cp transmission-settings.template.json $SETTINGS_PATH
-    export DOWNLOAD_DIR="/home/$USERNAME/Downloads"
-    TEMP_FILE=settings.temp.json
-
-    jq --arg DOWNLOAD_DIR "$DOWNLOAD_DIR" '."download-dir" = $DOWNLOAD_DIR' transmission-settings.template.json | \
-        jq --arg USERNAME "$USERNAME" '."rpc-username" = $USERNAME' | \
-        jq --arg PASSWORD "$PASSWORD" '."rpc-password" = $PASSWORD' | \
-        jq --arg DOWNLOAD_DIR "$DOWNLOAD_DIR" '."incomplete-dir" = $DOWNLOAD_DIR' > "$TEMP_FILE" && \
-        mv "$TEMP_FILE" "$SETTINGS_PATH"
+TEMPLATE="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )/transmission-settings.template.json"
+if [ ! -f "$SETTINGS_PATH" ]; then
+    echo " -> writing Transmission settings $SETTINGS_PATH"
+    DOWNLOAD_DIR="/home/$USERNAME/Downloads"
+    if ! jq --arg DOWNLOAD_DIR "$DOWNLOAD_DIR" --arg USERNAME "$USERNAME" --arg PASSWORD "$PASSWORD" \
+            '."download-dir" = $DOWNLOAD_DIR | ."incomplete-dir" = $DOWNLOAD_DIR | ."rpc-username" = $USERNAME | ."rpc-password" = $PASSWORD' \
+            "$TEMPLATE" > "$SETTINGS_PATH.tmp" || ! mv "$SETTINGS_PATH.tmp" "$SETTINGS_PATH"; then
+        rm -f "$SETTINGS_PATH.tmp"
+        echo " !! could not write $SETTINGS_PATH: Transmission not started"
+        exit 14
+    fi
+    chown "$USERNAME:$GID" "$SETTINGS_PATH" && chmod 600 "$SETTINGS_PATH"
+fi
+# Never start Transmission without valid settings: it would fall back to its defaults, without a password
+if ! jq -e '."rpc-authentication-required" == true and (."rpc-username" // "") != "" and (."rpc-password" // "") != ""' \
+        "$SETTINGS_PATH" >/dev/null 2>&1; then
+    echo " !! $SETTINGS_PATH is invalid or has no password: Transmission not started"
+    echo "    to recreate it: sudo rm $SETTINGS_PATH && sudo ./deploy.sh -u $USERNAME -p 'PASSWORD' ${DOMAIN:+-H $DOMAIN}"
+    exit 15
 fi
 
 if $NEED_SHARE; then
